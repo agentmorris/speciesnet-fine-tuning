@@ -1,0 +1,4 @@
+.claude
+.gemini
+__pycache__
+*.pyc

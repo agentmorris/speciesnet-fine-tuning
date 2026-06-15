@@ -1,0 +1,6 @@
+# SpeciesNet fine-tuning tutorial - Python dependencies
+#
+# The data-preparation script (scripts/coco_to_csv.py) uses only the Python
+# standard library, so nothing is required yet. Fine-tuning dependencies
+# (e.g. PyTorch, the SpeciesNet package) will be added here as the tutorial
+# grows.
