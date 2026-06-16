@@ -106,6 +106,10 @@ For now, the only converter provided is COCO Camera Traps → CSV. If your label
 
 TODO 
 
+#### Visualizing your training data before training
+
+TODO
+
 #### Renaming, merging, and removing classes with `--category-remap`
 
 TODO: this section is left over from an earlier state when remapping was part of .csv preparation
@@ -124,8 +128,6 @@ animal,remove
 * The special output value `remove` drops that class entirely.
 * Leaving `output` blank is an error.  If you meant to drop the class, write `remove` explicitly so it's clear you intended to.
 * Remapping happens *before* multi-species detection, so merging `lion_male` + `lion_female` into `lion` correctly turns a photo labeled with both into a single, unambiguous `lion` image rather than a multi-species one.
-
-
 
 ## Evaluation
 

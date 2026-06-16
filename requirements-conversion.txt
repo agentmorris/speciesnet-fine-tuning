@@ -1,0 +1,21 @@
+# OPTIONAL: dependencies for converting the SpeciesNet Keras weights into a
+# timm-compatible PyTorch checkpoint yourself.
+#
+# Most users do NOT need this: the tutorial provides a pre-converted timm
+# checkpoint to download. You only need this if you want to re-run the
+# Keras -> timm conversion (uses pjbull/speciesnet-convert).
+#
+# TensorFlow < 2.15 requires Python <= 3.11, so create a SEPARATE conda env:
+#   mamba create -n speciesnet-conversion python=3.11 pip -y
+#   mamba activate speciesnet-conversion
+#   pip install -r requirements-conversion.txt
+#
+# Keep this env separate from the training env (which uses Python 3.12).
+
+tensorflow<2.15.0
+torch
+torchvision
+timm
+numpy<2.0.0
+pillow
+pandas

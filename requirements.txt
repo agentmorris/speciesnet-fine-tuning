@@ -1,6 +1,23 @@
-# SpeciesNet fine-tuning tutorial - Python dependencies
+# SpeciesNet fine-tuning tutorial: training + inference dependencies.
 #
-# The data-preparation script (scripts/coco_to_csv.py) uses only the Python
-# standard library, so nothing is required yet. Fine-tuning dependencies
-# (e.g. PyTorch, the SpeciesNet package) will be added here as the tutorial
-# grows.
+# Install into a Python 3.12 conda env (see the README "Setting up your
+# environment" section). The --extra-index-url line below pulls CUDA 12.4 builds
+# of torch/torchvision, which work on RTX 40-series GPUs; change "cu124" to match
+# your CUDA (or use the CPU build) per https://pytorch.org/get-started/locally/.
+#
+# Pinned to the versions this tutorial was developed and tested against.
+
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+torch==2.6.0
+torchvision==0.21.0
+timm==1.0.27
+lightning==2.6.5
+torchmetrics==1.9.0
+pillow>=10.0
+numpy>=1.26
+
+# Optional: only needed if you want to load the released (FX) SpeciesNet .pt
+# directly, e.g. to reproduce the conversion-fidelity comparison. Not required to
+# fine-tune or to run a fine-tuned model.
+# onnx2torch==1.5.15
