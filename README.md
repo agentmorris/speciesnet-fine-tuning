@@ -96,45 +96,39 @@ For now, the only converter provided is COCO Camera Traps → CSV. If your label
 
 ## Running MegaDetector
 
-### Running SpeciesNet while you're running MD
+* TODO: talk about ways to run MD, AddaxAI, Python, etc.
 
-* TODO You might want to do this to compare a fine-tuned model to a custom taxonomy mapping later
-
-## Fine-tuning
-
-#### Preparing a mapping file
-
-TODO 
-
-#### Visualizing your training data before training
+## Visualizing your training data before training
 
 TODO
 
-#### Renaming, merging, and removing classes with `--category-remap`
+## Preparing a mapping file
 
-TODO: this section is left over from an earlier state when remapping was part of .csv preparation
+* TODO: describe the reasons you might want to remap clases: the same animal labeled two ways, sex/age splits you don't want (`lion`, `lion_male`, `lion_female`), difficult/rare categories that you don't expect AI to be able to separate (e.g. you may want to merge individual species that are rare into categories like `rodent` or `bird`). 
 
-Real datasets often need cleanup: the same animal labeled two ways, sex/age splits you don't want (`lion`, `lion_male`, `lion_female`), or difficult/rare categories that you don't expect AI to be able to separate (e.g. you may want to merge individual species that are rare into categories like `rodent` or `bird`). You can fix these without editing your source data by passing `--category-remap remap.csv`, where `remap.csv` has two columns, `input` and `output`:
+* TODO: describe coco_to_mapping_file.py, .csv file format
 
-```csv
-input,output
-lion_male,lion
-lion_female,lion
-animal,remove
-animal,remove
-```
+## Fine-tuning
 
-* A normal `output` *renames* the category. If several inputs map to the same output, they are *merged*.
-* The special output value `remove` drops that class entirely.
-* Leaving `output` blank is an error.  If you meant to drop the class, write `remove` explicitly so it's clear you intended to.
-* Remapping happens *before* multi-species detection, so merging `lion_male` + `lion_female` into `lion` correctly turns a photo labeled with both into a single, unambiguous `lion` image rather than a multi-species one.
+* TODO: describe the fine-tuning process
 
 ## Evaluation
 
+* TODO: describe analyze_classification_results.py (for labeled data)
+* TODO: describe postprocess_batch_results.py(for unlabeled data)
+
 ### Comparing to taxonomically-mapped SpeciesNet
+
+* TODO: describe restrict_to_taxa list, comparison script
 
 ## Running your fine-tuned model
 
-## Other approaches
+* TODO: describe predict.py
 
+## Working with your results
 
+* TODO: talk about things people do next, especially Timelapse
+
+## Future work
+
+* TODO: Conversion and mapping file scripts for other input formats
