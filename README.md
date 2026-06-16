@@ -104,9 +104,65 @@ TODO
 
 ## Preparing a mapping file
 
-* TODO: describe the reasons you might want to remap clases: the same animal labeled two ways, sex/age splits you don't want (`lion`, `lion_male`, `lion_female`), difficult/rare categories that you don't expect AI to be able to separate (e.g. you may want to merge individual species that are rare into categories like `rodent` or `bird`). 
+A mapping file is an optional CSV that renames, merges, or drops your categories at training time.  It is kept separate from your data CSV on purpose: the data CSV stays a literal record of your labels, while the mapping captures modeling decisions, so you can try different groupings without ever editing your data.
 
-* TODO: describe coco_to_mapping_file.py, .csv file format
+### Why you might remap
+
+Common reasons:
+
+* **The same animal is labeled two ways.** For example `wildebeest` and `blue_wildebeest`, or a misspelling sitting alongside the correct spelling.  Map them to one name so they count as a single class.
+* **You have splits you do not want the model to make.** Sex or age labels like `lion`, `lion_male`, and `lion_female` are usually better merged into `lion`, unless you specifically need to tell them apart and have enough examples of each.
+* **Some classes are too rare or too hard to tell apart.** A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, and so on) usually gives a more useful model than dozens of classes the model can barely learn.
+* **Some labels are not real classes.** A vague catch-all like `animal`, or a junk label, can be dropped entirely.
+
+You do not have to remap anything: if you skip the mapping file, every category (above the minimum count) is trained as its own class.
+
+### The mapping CSV format
+
+The mapping CSV has two columns that matter, `input` and `output` (any other columns, such as the `count` column described below, are ignored):
+
+```csv
+input,output
+hyena_spotted,hyena
+hyena_striped,hyena
+lion_male,lion
+lion_female,lion
+crane,other_bird
+eagle,other_bird
+animal,remove
+zebra,
+```
+
+The `output` column decides what happens to each `input` category:
+
+* **A name** renames the category; several inputs sharing one output are merged (so `hyena_spotted` and `hyena_striped` above both become `hyena`).
+* **The exact word `remove`** drops the category entirely; its images contribute nothing to training.
+* **Left blank** leaves the category unchanged, which is identical to not listing it at all (the `zebra` row above is just documentation; you could delete it).
+
+Two rules: each `input` may appear only once, and the mapping is applied in a single pass, so if you map `A` to `B` and also `B` to `C`, an `A` becomes `B`, not `C`.
+
+### Generating a template
+
+You can write the mapping CSV by hand, but if your labels are in COCO Camera Traps format it is easier to start from a generated template.  `scripts/coco_to_mapping_file.py` lists every category for you, sorted from most to least common, with the `output` column left blank to fill in:
+
+```bash
+python scripts/coco_to_mapping_file.py path/to/labels.json mapping.csv
+```
+
+The result has one row per category (plus a row for `unlabeled`, the images with no annotations, which is always included) and a `count` column giving the number of images that contain that category:
+
+```csv
+input,output,count
+wildebeest,,6870
+gazelle_thomsons,,6227
+...
+sparrow,,1
+unlabeled,,0
+```
+
+Use `count` to decide what to merge or drop; the long tail at the bottom is where merging into coarser classes usually helps.  Then fill in the `output` column and pass the file to training with `--mapping` (see "Fine-tuning").
+
+One caveat about `count`: it is the number of *images* per category, which is a good planning guide, but the model actually trains on MegaDetector crops, so the number of training examples per class will differ (an image of a herd yields many crops; a `blank` image usually yields none).  The exact per-class crop counts that training used, after your mapping and the minimum-count filter, are reported in the run's `summary.md`.
 
 ## Fine-tuning
 
@@ -179,6 +235,8 @@ Everything for one run lives in its run folder:
 * **`checkpoints/`**: one checkpoint per epoch (by default) plus `last.ckpt`, which is what resuming uses.
 * **`metrics.csv`**: per-epoch training and validation metrics.
 * **`config.json`**: the full configuration, which is what makes resuming possible.
+* **`split.csv`**: which camera (location) was assigned to the training set and which to validation.
+* **`hparams.yaml`**: the model's hyperparameters, as recorded by the training engine (PyTorch Lightning).
 
 ### Resuming an interrupted run
 
@@ -209,7 +267,57 @@ A few other practical notes:
 
 ## Running your fine-tuned model
 
-* TODO: describe predict.py
+Once you have a fine-tuned model (`model_best.pt` from your run folder), you run it on new images the same way you prepared your training data: run MegaDetector on the new images, then classify each animal box.  The `scripts/predict.py` script does the classification step.
+
+`predict.py` does not run MegaDetector for you, so you need a MegaDetector results file for the new images first (see "Running MegaDetector").  It also does not need the SpeciesNet starting weights or anything from training besides `model_best.pt`: that file already records your class list and the exact preprocessing, so predictions match training automatically.
+
+A minimal run:
+
+```bash
+python scripts/predict.py \
+    runs/my-first-run/model_best.pt \
+    md_results.json \
+    --image-root /path/to/new/images \
+    --output predictions.json
+```
+
+By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see "Evaluation").  Pass `--csv-output` to instead write a simple per-box CSV (described below), which is handier if you only want to skim results in a spreadsheet.
+
+### Options
+
+| Option | Default | What it does |
+|---|---|---|
+| `--image-root` | (required) | The folder the MegaDetector filenames are relative to. |
+| `--output` | (required) | Where to write the results (a MegaDetector-format `.json` by default). |
+| `--csv-output` | off | Write a flat per-box CSV to `--output` instead of MegaDetector format. |
+| `--conf-threshold` | `0.1` | Only classify animal boxes at or above this MegaDetector confidence. |
+| `--topk` | `1` | How many top predictions (with scores) to record per box. |
+| `--batch-size` | `32` | Crops classified per batch. |
+| `--device` | `auto` | `auto` picks a GPU if one is available, otherwise the CPU. |
+
+### The MegaDetector-format output
+
+In the default output, each classified animal detection gains a `classifications` list, ordered most likely first, where each entry pairs a class id (an index into the top-level `classification_categories`) with a score.  With `--topk 5` you get the top five classes per box.  Because the whole detection file is preserved, this output is exactly what MegaDetector's classification postprocessing expects, which is how the "Evaluation" step below works.
+
+### The CSV output
+
+With `--csv-output` you get one row per classified animal box, not per image, because an image can contain several animals.  Each row gives the filename, the box (as normalized `x, y, w, h`), the MegaDetector detection confidence, and the model's prediction(s) and score(s):
+
+```csv
+filename,x,y,w,h,detection_conf,pred1_class,pred1_score
+2019_AB01_000123.JPG,0.21,0.34,0.08,0.15,0.94,impala,0.972
+2019_AB01_000123.JPG,0.55,0.41,0.10,0.18,0.88,zebra,0.910
+2019_AB07_000044.JPG,0.30,0.29,0.40,0.55,0.97,elephant,0.995
+```
+
+With `--topk 3`, each row also carries `pred2_class`, `pred2_score`, `pred3_class`, and `pred3_score`, which is useful for seeing the model's second guess on hard crops.
+
+A few things to keep in mind:
+
+* **Only animal boxes are classified.** Person and vehicle detections from MegaDetector are never classified, and animal boxes below `--conf-threshold` are skipped.  In the MegaDetector-format output those detections are still present, just without a `classifications` entry; in the CSV output they do not appear at all.
+* **`blank` is a prediction, not an absence of a box.** If you trained a `blank` class, the model can label an animal box as `blank` when it thinks the box is actually empty (a MegaDetector false positive).  An image where MegaDetector found no animal at all is "blank" in a different sense: it has no animal box to classify.
+* **The model only knows your classes.** It predicts from the label set you trained on, using your names, and has no knowledge of SpeciesNet's broader taxonomy or its geofence.  Anything outside your classes will be forced into the closest class you did train.
+* **Run it in your training environment.** Use the same environment you fine-tuned in; `predict.py` rebuilds the model from `model_best.pt` and needs the same packages.
 
 ## Evaluation
 

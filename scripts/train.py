@@ -19,8 +19,10 @@ See the README "Fine-tuning" section for the full walkthrough.
 """
 
 import argparse
+import csv
 import json
 import os
+import re
 import sys
 import platform
 from pathlib import Path
@@ -121,6 +123,33 @@ def compute_class_weights(instances, classes):
     total = sum(counts.values())
     n = len(classes)
     return torch.tensor([total / (n * counts[c]) for c in classes], dtype=torch.float32)
+
+
+def read_best(run_folder, best_path, trainer):
+    """Return (best_epoch, best_val_metrics) for the monitored best checkpoint.
+
+    The best checkpoint's epoch is parsed from its filename; its validation
+    metrics are looked up in metrics.csv. Falls back to the final-epoch metrics
+    if the lookup fails.
+    """
+    best_epoch = None
+    if best_path:
+        m = re.search(r"epoch0*([0-9]+)", os.path.basename(best_path))
+        if m:
+            best_epoch = int(m.group(1))
+    metrics = {}
+    mpath = os.path.join(run_folder, "metrics.csv")
+    if best_epoch is not None and os.path.exists(mpath):
+        with open(mpath, newline="") as f:
+            for row in csv.DictReader(f):
+                if row.get("epoch") and row.get("val_macro_acc") and int(float(row["epoch"])) == best_epoch:
+                    for k in ("val_loss", "val_acc", "val_macro_acc"):
+                        if row.get(k):
+                            metrics[k] = round(float(row[k]), 4)
+    if not metrics:
+        metrics = {k: round(float(v), 4) for k, v in trainer.callback_metrics.items()
+                   if k.startswith("val")}
+    return best_epoch, metrics
 
 
 def find_latest_checkpoint(run_folder):
@@ -229,6 +258,15 @@ def write_summary(run_folder, config, prep_report, split_report, classes,
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
+def write_split(run_folder, split):
+    """Write the camera-to-split assignment to split.csv (location, split)."""
+    with open(os.path.join(run_folder, "split.csv"), "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["location", "split"])
+        for loc in sorted(split):
+            w.writerow([loc, split[loc]])
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -329,8 +367,10 @@ def main(argv=None):
                   if config["backbone_checkpoint"] else "ImageNet (stand-in)",
                   "n_trainable": model.n_trainable, "n_total": model.n_total}
 
-    # Write an initial summary (so the data/split report exists even if training fails).
+    # Write the split assignment and an initial summary (so the data/split report
+    # exists even if training fails).
     if not is_ddp_child():
+        write_split(run_folder, split)
         write_summary(run_folder, config, prep_report, split_report, classes, model_info)
 
     # Devices / strategy (gloo on native Windows, NCCL elsewhere).
@@ -383,13 +423,13 @@ def main(argv=None):
     if trainer.is_global_zero:
         cb = trainer.checkpoint_callback
         best = cb.best_model_path or find_latest_checkpoint(run_folder)
-        metrics = {k: float(v) for k, v in trainer.callback_metrics.items()
-                   if k.startswith("val")}
+        best_epoch, best_metrics = read_best(run_folder, best, trainer)
         inf_path = os.path.join(run_folder, "model_best.pt")
-        final = {"epoch": None, "metrics": metrics, "inference_checkpoint": "model_best.pt"}
+        final = {"epoch": best_epoch, "metrics": best_metrics,
+                 "inference_checkpoint": "model_best.pt"}
         if best and os.path.exists(best):
             export_inference_checkpoint(best, inf_path, config["timm_model"],
-                                        len(classes), classes, None, metrics)
+                                        len(classes), classes, best_epoch, best_metrics)
         write_summary(run_folder, config, prep_report, split_report, classes,
                       model_info, final=final)
         print("Done. Best checkpoint: %s" % best)
