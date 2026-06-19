@@ -4,23 +4,95 @@
 
 ### Goals of this tutorial
 
-### Notes on what to expect from species classification in generally
+[SpeciesNet](https://github.com/google/cameratrapai/) is an AI model that classifies species in camera trap images.  SpeciesNet was trained on around 2,500 categories (mostly species, but also some higher-level taxa) from a [variety of global geographies](https://github.com/google/cameratrapai/blob/main/model_cards/v4.0.1a.md#country-distribution).  2,500 is a lot, but it's just a fraction of the species that are monitored with camera traps, so in some scenarios, users might benefit from a local model that "knows" the species in a particular study area.
 
-* TODO most of the benefit comes from getting you through your common classes quickly, so prioritize high precision and adequate recall on common classes, rather than getting hung up on rare classes (even if the rare clases are the ones you care about)
+While it's possible to train a regionally-specific model from scratch, using SpeciesNet as a starting point can significantly reduce the amount of data required to train a new classifier.  However, Using SpeciesNet as a starting point doesn't make it <i>easier</i> to train a new model (in terms of technical complexity), it just reduces the amount of training data required.  The goal of this tutorial is to guide a user through the process of creating a fine-tuned version of SpeciesNet on your own data.
 
-### What might I try before fine-tuning?
+This tutorial will ask you to set up a Python environment so you can run the code from this repo, but you won't need to <i>write</i> any code.
 
-* TODO See whether there's already a model available (https://agentmorris.github.io/camera-trap-ml-survey/#publicly-available-ml-models-for-camera-traps)
-* TODO Try SpeciesNet off the shelf, with a custom taxonomy list instead of the standard geofence
+If you have any questions or feedback about this tutorial, or you get stuck, or anything here is just outright wrong, <a href="mailto:agentmorris@gmail.com">email me</a>!
 
-### What are situations where this is probably a bad idea?
+### Consider using AI to take it from here
 
-* TODO Fine-tuning SpeciesNet still relies on MegaDetector to work, so cases where MD isn't very good - small animal cameras, cameras with a lot of semi-aquatic mammals in the water, etc. - can't be "rescued" by fine-tuning SpeciesNet
-* TODO Fine-tuning still generally can't help AI see anything humans can't see in individual images
+Another way of looking at this tutorial is that it helps guide a user's <i>agent</i> through the process of creating a fine-tuned version of SpeciesNet.  So rather than reading this entire tutorial, consider opening a command-line AI tool - e.g. [Claude Code](https://code.claude.com/docs/en/overview), [Antigravity CLI](https://antigravity.google/product/antigravity-cli), or [Codex CLI](https://developers.openai.com/codex/cli) - on the computer where your data lives, and saying something like this:
+
+> I want to review my camera trap images as efficiently as possible.  My images are in c:\my-images.  Visit https://github.com/agentmorris/speciesnet-finetuning, read the README, talk to me about whether fine-tuning SpeciesNet on my data is likely to be helpful, and - if we decide to proceed - walk me through the process of fine-tuning.
+
+Whether you're a human who is still reading or an agent whose human asked you to read this tutorial, welcome.
+
+### What to expect from species classification, and when fine-tuning is/isn't worth it
+
+In general, AI is not yet ready to fully automate most camera trap review workflows (not just SpeciesNet, this is true for any AI model).  If your focal species is a rare small cat, and you have other small cats in your study area that look similar, you probably don't want to trust AI to differentiate one small cat from another.  But that doesn't mean that AI can't help you!  IMHO too many users bail on AI because it doesn't perform as well as they like on rare species.
+
+For most users, the benefit of AI comes from <i>getting you through your common classes quickly</i>, so you can focus your time and expertise on the species that are important and/or difficult.  I.e., think of AI as helping you separate "images you need to look at" from "images you don't need to look at".  If you are studying rare cats, but 75% of your images are blank, and another 15% of your images are cattle, AI can save you <i>lots</i> of time - by letting you auto-accept or very quickly review the blanks and cattle - even if it's <i>terrible</i> at differentiating your rare cats, <i>as long as it doesn't call your rare cat images blanks or cattle</i>.
+
+In machine learning terminology, AI can help you as long as it has <i>very high precision</i> and <i>adequate recall</i> on your common classes.  I.e., if cattle is your most common class, it's <i>not</i> OK to call your rare cats "cattle" (because you're not going to look at those images), but it's fine to call a few cattle images "unknown", or "mammal", or even "cat" (because you're going to look at those images anyway).
+
+So AI-based species classification is most likely to be helpful if you have common, easy species you don't want to spend a lot of time on.  If all of your classes are equally common and equally important, unless AI is nearly perfect (which isn't really a thing), species classification is less likely to be helpful.
+
+#### When fine-tuning might <i>not</i> be worth it
+
+If AI species classification is most helpful for helping you avoid spending time on common, easy species, this also means that even if SpeciesNet doesn't know about your focal species, it might not be worth the hassle of fine-tuning, <i>as long as SpeciesNet has very high precision on your common classes</i>.  Maybe you would get better accuracy on your rare classes if you fine-tuned on your own data, and maybe you wouldn't, but in many scenarios, even if fine-tuning <i>does</i> improve accuracy, it won't save you any more time than the non-fine-tuned version.  E.g. if you are studying lynx in an area where you also have bobcats, and most of your images are blanks and cattle, maybe fine-tuning will get you 5% more accuracy differentiating bobcat from lynx, but this doesn't help you <i>at all</i> if you're going to look at all of those bobcat/lynx images anyway.
+
+Similarly, if SpeciesNet doesn't know about some of your species, but it consistently classifies them as some other species, fine-tuning is almost definitely not the right solution.  E.g. if you have a lot of European red deer in your study area, and SpeciesNet consistently classifies them as elk (which don't co-occur with red deer), it's <i>much</i> easier to just re-map all the "elk" predictions to "red deer" than to fine-tune.  More on this kind of re-mapping below, in the "what might I try before fine-tuning?" section.
+
+Finally, SpeciesNet depends on [MegaDetector](https://github.com/agentmorris/MegaDetector) to find animals in the first place.  If MegaDetector fails to find some of your animals, fine-tuning SpeciesNet can't "rescue" those missed animals.  For example, semi-aquatic mammals that are partially submerged (e.g. beavers, otters, nutria, etc. with just their heads sticking out of the water) are a struggle for MegaDetector, and fine-tuning SpeciesNet won't help you recover those animals.
+
+#### When fine-tuning is likely worth it
+
+* If you have common classes that are handled poorly by SpeciesNet, fine-tuning is likely to be worth it.  For example, SpeciesNet does not have a "polar bear" class, and does not consistently classify polar bears as any other specific class.  I.e., SpeciesNet might very well lump your polar bears in with a more common class, so if you have polar bears in your data, SpeciesNet can't really save you time.  Fine-tuning SpeciesNet is likely to be helpful in this case, even if polar bears are rare.  This is true for any scenario where you have an important class that is generally easy to see, but doesn't look anything like what SpeciesNet
+
+* Similarly, if you have two very common classes that humans can easily distinguish, but SpeciesNet doesn't know about them or doesn't perform well on them, SpeciesNet might not be helpful to you out of the box.  These are good cases for fine-tuning.
+
+* Finally, if you are one of the lucky few who is within "striking distance" of full automation, and that little bit of improvement you might see on rare classes could be the difference between reviewing images and trusting high-confidence AI predictions entirely, fine-tuning might be worth it.  This is rare!  This is typically a case where you have very few categories that are easily confused with each other.  If this is your scenario, fine-tuning might be worth it.
+
+#### What might I try before fine-tuning?
+
+* <i>Try other models.</i> SpeciesNet is great (in my super-biased opinion), but it's not the only game in town.  If there's another classifier whose training distribution matches your species distribution pretty well, try that before fine-tuning.  I try to keep track of publicly-available species classification models [here](https://agentmorris.github.io/camera-trap-ml-survey/#publicly-available-ml-models-for-camera-traps).
+
+* <i>Get the most out of "vanilla SpeciesNet".</i> In particular, many issues that might make fine-tuning seem like a good option can be resolved by just remapping SpeciesNet's outputs differently, instead of using the standard SpeciesNet geofence (a list of taxa that are allowed in each country (or US state)).  You can do this with the <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a> function, which takes a list of SpeciesNet taxa in a .csv file, and maps them to whatever labels you want.  In addition to mapping one species to another, you could, for example, map all birds that aren't otherwise mapped to an "other bird" label.  More generally, I have some "pro tips" for getting the most out of MegaDetector and SpeciesNet [here](http://lila.science/speciesnet-pro-tips).
+
+* <i>Invest in workflow efficiency.</i>  Remember that the goal of processing your camera trap images with AI is to save you (ecologists) time, and in many cases the best hour that you can invest in saving yourself time isn't fine-tuning an AI model, it's increasing the efficiency of your workflow in ways that have nothing to do with AI.  Do you know all the keyboard shortcuts in whatever tool you use to review images?  If not, I recommend learning them (and practice using them) before going anywhere near fine-tuning an AI model.  Are you tagging species in an Excel spreadsheet?  That's OK, but it's not optimal, and you might find that learning to use an image review tool like [Timelapse](https://timelapse.ucalgary.ca/) gives you a bigger efficiency boost than you would get from investing time in fine-tuning a model.
+
+All that said, there are lots of good reasons to fine-tune your own model, so if I haven't talked you out of fine-tuning, read on!
+
+### How much data do I need?
+
+There's no easy answer to this; if you can predict the relationship between the amount of training data someone has and the accuracy they'll see after training a model, you can have a free PhD in computer science.  But as a very general rule, I wouldn't bother training a category with less than 100 training examples that are pretty distinct (i.e., the same deer standing in the same place in the same sequence of ten images is more like one training sample).  "Low-single-digit thousands" of examples per category would be more comfortable for fine-tuning.  "High-single-digit thousands" would be more comfortable for training from scratch.  All of these numbers depend on how distinctive your species are: a species with bright stripes, or a species that looks nothing like any of your other species, might be fine with 100 examples.  If you have two rodents that can be distinguished, but not easily, maybe those need more like 1000 examples each.
+
+So, consider grouping together categories that are very small in terms of training examples, e.g. if you have 50 different songbirds with 10 examples each, I wouldn't try to train a category on each one; consider lumping them into an "other songbird" category (more later on how to do this).
+
+Because we will be training on animals that are cropped out of their original images with MegaDetector, if you have a group of four elephants in an image, that "counts" as four examples.
 
 ## Setting up your environment
 
-* TODO instructions on installing miniforge, checking out this git repo, pip installing stuff, conda activate
+The instructions in this tutorial will assume two things:
+
+1. You have cloned this git repo to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.
+
+2. You have a Python environment set up.  For folks new to Python, we recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
+
+Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, cd into that folder like this:
+
+`cd c:\git\speciesnet-finetuning`
+
+Any folder is fine, I'm just using that as an example), start a Miniforge prompt, 
+
+Then create a new Python environment for this tutorial, like this (any environment name is fine, I'm just using "speciesnet-finetuning" as an example):
+
+`mamba create -n speciesnet-finetuning python=3.12 pip -y`
+
+That command says "create a new Python environment called 'speciesnet-finetuning' that has Python version 3.12, and install the 'pip' package inside that environment".
+
+Then activate that environment like this:
+
+`mamba activate speciesnet-finetuning`
+
+...and install all the libraries this tutorial depends on, like this:
+
+`pip install -r requirements.txt`
+
+That was a lot of random Python gibberish, I know, but if anything goes wrong, feel free to <a href="mailto:agentmorris@gmail.com">email me</a> with questions,  Or ask AI!  If you ask AI questions about setup stuff, consider pointing it to this README so it has the context of what we're trying to do.
 
 ## Preparing your data
 
@@ -323,6 +395,20 @@ A few things to keep in mind:
 
 * TODO: describe analyze_classification_results.py (for labeled data)
 * TODO: describe postprocess_batch_results.py(for unlabeled data)
+
+### Creating a val-only data file
+
+When you evaluate, you usually want to score only the validation cameras, so you need a ground-truth file that contains just those images.  `scripts/create_split_coco_file.py` takes your COCO Camera Traps file and the `split.csv` that training wrote into your run folder, and writes a new COCO file containing only the images (and their annotations) from one split:
+
+```bash
+python scripts/create_split_coco_file.py labels.json runs/my-first-run/split.csv val_gt.json --split val
+```
+
+The three positional arguments are the input COCO file, the `split.csv`, and the output file; `--split` chooses which split to keep (default `val`).  Every image in the input COCO file must have a `location`, and those locations are matched against `split.csv` to decide which images belong to the split.
+
+The result pairs naturally with the MegaDetector-format predictions from `predict.py`: `val_gt.json` is the ground truth and `val_predictions.json` is your model's classifications, which are exactly the two inputs `analyze_classification_results.py` expects.
+
+One subtlety: this subset is purely location-based, so it includes every validation image in your COCO file, including any multi-species images that data preparation dropped under the default `omit`.  Those images have ground truth but no prediction, so they count as misses in the metrics.  This is usually a small fraction, but if it matters you can restrict the ground truth to the images you actually trained on.
 
 ### Comparing to taxonomically-mapped SpeciesNet
 
