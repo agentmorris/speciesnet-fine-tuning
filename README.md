@@ -12,6 +12,10 @@ This tutorial will ask you to set up a Python environment so you can run the cod
 
 If you have any questions or feedback about this tutorial, or you get stuck, or anything here is just outright wrong, <a href="mailto:agentmorris@gmail.com">email me</a>!
 
+### Special thanks
+
+This tutorial builds on the amazing work of [Peter Bull](https://www.linkedin.com/in/pjbull), who ported the SpeciesNet weights to a fine-tuning-friendly container.  See his [speciesnet-convert](https://github.com/pjbull/speciesnet-convert) repo for more information.
+
 ### Consider using AI to take it from here
 
 Another way of looking at this tutorial is that it helps guide a user's <i>agent</i> through the process of creating a fine-tuned version of SpeciesNet.  So rather than reading this entire tutorial, consider opening a command-line AI tool - e.g. [Claude Code](https://code.claude.com/docs/en/overview), [Antigravity CLI](https://antigravity.google/product/antigravity-cli), or [Codex CLI](https://developers.openai.com/codex/cli) - on the computer where your data lives, and saying something like this:
@@ -32,27 +36,27 @@ So AI-based species classification is most likely to be helpful if you have comm
 
 #### When fine-tuning might <i>not</i> be worth it
 
-If AI species classification is most helpful for helping you avoid spending time on common, easy species, this also means that even if SpeciesNet doesn't know about your focal species, it might not be worth the hassle of fine-tuning, <i>as long as SpeciesNet has very high precision on your common classes</i>.  Maybe you would get better accuracy on your rare classes if you fine-tuned on your own data, and maybe you wouldn't, but in many scenarios, even if fine-tuning <i>does</i> improve accuracy, it won't save you any more time than the non-fine-tuned version.  E.g. if you are studying lynx in an area where you also have bobcats, and most of your images are blanks and cattle, maybe fine-tuning will get you 5% more accuracy differentiating bobcat from lynx, but this doesn't help you <i>at all</i> if you're going to look at all of those bobcat/lynx images anyway.
+* **If SpeciesNet is already very good at your common species, fine-tuning might not be worth it.**.  If AI species classification is most helpful for helping you avoid spending time on common, easy species, this also means that even if SpeciesNet doesn't know about your focal species, it might not be worth the hassle of fine-tuning, <i>as long as SpeciesNet has very high precision on your common classes</i>.  Maybe you would get better accuracy on your rare classes if you fine-tuned on your own data, and maybe you wouldn't, but in many scenarios, even if fine-tuning <i>does</i> improve accuracy, it won't save you any more time than the non-fine-tuned version.  E.g. if you are studying lynx in an area where you also have bobcats, and most of your images are blanks and cattle, maybe fine-tuning will get you 5% more accuracy differentiating bobcat from lynx, but this doesn't help you <i>at all</i> if you're going to look at all of those bobcat/lynx images anyway.
 
-Similarly, if SpeciesNet doesn't know about some of your species, but it consistently classifies them as some other species, fine-tuning is almost definitely not the right solution.  E.g. if you have a lot of European red deer in your study area, and SpeciesNet consistently classifies them as elk (which don't co-occur with red deer), it's <i>much</i> easier to just re-map all the "elk" predictions to "red deer" than to fine-tune.  More on this kind of re-mapping below, in the "what might I try before fine-tuning?" section.
+* **If SpeciesNet doesn't know about some of your species, but it consistently classifies them as some other species, fine-tuning is almost definitely not the ideal solution**.  E.g. if you have a lot of European red deer in your study area, and SpeciesNet consistently classifies them as elk (which don't co-occur with red deer), it's <i>much</i> easier to just re-map all the "elk" predictions to "red deer" than to fine-tune.  More on this kind of re-mapping below, in the "what might I try before fine-tuning?" section.
 
-Finally, SpeciesNet depends on [MegaDetector](https://github.com/agentmorris/MegaDetector) to find animals in the first place.  If MegaDetector fails to find some of your animals, fine-tuning SpeciesNet can't "rescue" those missed animals.  For example, semi-aquatic mammals that are partially submerged (e.g. beavers, otters, nutria, etc. with just their heads sticking out of the water) are a struggle for MegaDetector, and fine-tuning SpeciesNet won't help you recover those animals.
+* **If MegaDetector doesn't detect your animals well in the first place, fine-tuning SpeciesNet won't help**.  SpeciesNet depends on [MegaDetector](https://github.com/agentmorris/MegaDetector) to find animals, so if MegaDetector fails to find some of your animals, SpeciesNet never sees them, and fine-tuning SpeciesNet can't "rescue" those missed animals.  For example, semi-aquatic mammals that are partially submerged (e.g. beavers, otters, nutria, etc. with just their heads sticking out of the water) are a struggle for MegaDetector, and fine-tuning SpeciesNet won't help you recover those animals.
+
+* **If <i>humans</i> can't easily tell your species apart, AI can't either**.  A good guideline for the ceiling of what you can ask of AI is that with lots of data, a computer vision model can distinguish species that you could teach a wildlife novice to distinguish with a few minutes of training.
 
 #### When fine-tuning is likely worth it
 
-* If you have common classes that are handled poorly by SpeciesNet, fine-tuning is likely to be worth it.  For example, SpeciesNet does not have a "polar bear" class, and does not consistently classify polar bears as any other specific class.  I.e., SpeciesNet might very well lump your polar bears in with a more common class, so if you have polar bears in your data, SpeciesNet can't really save you time.  Fine-tuning SpeciesNet is likely to be helpful in this case, even if polar bears are rare.  This is true for any scenario where you have an important class that is generally easy to see, but doesn't look anything like what SpeciesNet
+* **If you have common, easy-to-see species that are not in SpeciesNet's training data and don't look exactly like something in SpeciesNet's training data, fine-tuning might help**.  For example, SpeciesNet does not have a "polar bear" class, and does not consistently classify polar bears as any other specific class.  I.e., SpeciesNet might very well lump your polar bears in with a more common class, so if you have polar bears in your data, SpeciesNet can't really save you time.  Fine-tuning SpeciesNet is likely to be helpful in this case, even if polar bears are rare.  This is true for any scenario where you have an important class that is generally easy to see, but doesn't look anything like what SpeciesNet knows about.
 
-* Similarly, if you have two very common classes that humans can easily distinguish, but SpeciesNet doesn't know about them or doesn't perform well on them, SpeciesNet might not be helpful to you out of the box.  These are good cases for fine-tuning.
-
-* Finally, if you are one of the lucky few who is within "striking distance" of full automation, and that little bit of improvement you might see on rare classes could be the difference between reviewing images and trusting high-confidence AI predictions entirely, fine-tuning might be worth it.  This is rare!  This is typically a case where you have very few categories that are easily confused with each other.  If this is your scenario, fine-tuning might be worth it.
+* **If you are one of the lucky few who is within "striking distance" of full automation, and that little bit of improvement you might see on rare classes could be the difference between reviewing images and trusting high-confidence AI predictions entirely, fine-tuning might be worth it**.  This is rare!  This is typically a case where you have very few categories that are easily confused with each other, and a <i>relatively</i> high tolerance for a few mistakes.  E.g. maybe your primary goal is to count livestock species, and you find that SpeciesNet is <i>almost good enough</i> at this task in your images to do this with no human review.  If this is your scenario, fine-tuning might be worth it.
 
 #### What might I try before fine-tuning?
 
-* <i>Try other models.</i> SpeciesNet is great (in my super-biased opinion), but it's not the only game in town.  If there's another classifier whose training distribution matches your species distribution pretty well, try that before fine-tuning.  I try to keep track of publicly-available species classification models [here](https://agentmorris.github.io/camera-trap-ml-survey/#publicly-available-ml-models-for-camera-traps).
+* **Try other models**. SpeciesNet is great (in my super-biased opinion), but it's not the only game in town.  If there's another classifier whose training distribution matches your species distribution pretty well, try that before fine-tuning.  I try to keep track of publicly-available species classification models [here](https://agentmorris.github.io/camera-trap-ml-survey/#publicly-available-ml-models-for-camera-traps).
 
-* <i>Get the most out of "vanilla SpeciesNet".</i> In particular, many issues that might make fine-tuning seem like a good option can be resolved by just remapping SpeciesNet's outputs differently, instead of using the standard SpeciesNet geofence (a list of taxa that are allowed in each country (or US state)).  You can do this with the <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a> function, which takes a list of SpeciesNet taxa in a .csv file, and maps them to whatever labels you want.  In addition to mapping one species to another, you could, for example, map all birds that aren't otherwise mapped to an "other bird" label.  More generally, I have some "pro tips" for getting the most out of MegaDetector and SpeciesNet [here](http://lila.science/speciesnet-pro-tips).
+* **Get the most out of "vanilla SpeciesNet"**.In particular, many issues that might make fine-tuning seem like a good option can be resolved by just remapping SpeciesNet's outputs differently, instead of using the standard SpeciesNet geofence (a list of taxa that are allowed in each country (or US state)).  You can do this with the <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a> function, which takes a list of SpeciesNet taxa in a .csv file, and maps them to whatever labels you want.  In addition to mapping one species to another, you could, for example, map all birds that aren't otherwise mapped to an "other bird" label.  This [skill](https://github.com/agentmorris/agentmorrispublic/blob/main/skills/speciesnet-taxonomy-mapping/SKILL.md) or this [app](http://dmorris.net/speciesnet-taxonomy-mapper) can help you make those .csv files.  More generally, I have some "pro tips" for getting the most out of MegaDetector and SpeciesNet [here](http://lila.science/speciesnet-pro-tips).
 
-* <i>Invest in workflow efficiency.</i>  Remember that the goal of processing your camera trap images with AI is to save you (ecologists) time, and in many cases the best hour that you can invest in saving yourself time isn't fine-tuning an AI model, it's increasing the efficiency of your workflow in ways that have nothing to do with AI.  Do you know all the keyboard shortcuts in whatever tool you use to review images?  If not, I recommend learning them (and practice using them) before going anywhere near fine-tuning an AI model.  Are you tagging species in an Excel spreadsheet?  That's OK, but it's not optimal, and you might find that learning to use an image review tool like [Timelapse](https://timelapse.ucalgary.ca/) gives you a bigger efficiency boost than you would get from investing time in fine-tuning a model.
+* **Invest in workflow efficiency**.  Remember that the goal of processing your camera trap images with AI is to save you (ecologists) time, and in many cases the best hour that you can invest in saving yourself time isn't fine-tuning an AI model, it's increasing the efficiency of your workflow in ways that have nothing to do with AI.  Do you know all the keyboard shortcuts in whatever tool you use to review images?  If not, I recommend learning them (and practice using them) before going anywhere near fine-tuning an AI model.  Are you tagging species in an Excel spreadsheet?  That's OK, but it's not optimal, and you might find that learning to use an image review tool like [Timelapse](https://timelapse.ucalgary.ca/) gives you a bigger efficiency boost than you would get from investing time in fine-tuning a model.
 
 All that said, there are lots of good reasons to fine-tune your own model, so if I haven't talked you out of fine-tuning, read on!
 
@@ -253,7 +257,9 @@ Before fine-tuning you should already have:
 
 ### Getting the SpeciesNet starting weights
 
-Fine-tuning starts from a PyTorch copy of SpeciesNet's EfficientNetV2-M backbone.  Download the pre-converted checkpoint, `speciesnet_timm_m.pt`, from [TODO: add release link], and pass it with `--backbone-checkpoint`.  If you leave that option off, the script falls back to generic ImageNet weights, which is only useful for checking that your setup runs at all; for real results you want the SpeciesNet weights.
+TODO: re-write this section once the default is to automatically download weights
+
+Fine-tuning starts from a PyTorch copy of SpeciesNet's EfficientNetV2-M backbone.  Download the pre-converted checkpoint, `speciesnet_timm.pt`, from [TODO: add release link], and pass it with `--backbone-checkpoint`.  If you leave that option off, the script falls back to generic ImageNet weights, which is only useful for checking that your setup runs at all; for real results you want the SpeciesNet weights.
 
 That checkpoint is produced by converting SpeciesNet's original Keras weights into a `timm` model.  You do not need to run that conversion yourself (it needs a separate environment; see `requirements-conversion.txt` and "Other approaches"), because the download above already did it once.
 
@@ -268,7 +274,6 @@ python scripts/train.py \
     --data-csv data.csv \
     --image-root /path/to/images \
     --md-results md_results.json \
-    --backbone-checkpoint speciesnet_timm_m.pt \
     --mapping mapping.csv \
     --run-folder runs/my-first-run
 ```
@@ -417,6 +422,9 @@ One subtlety: this subset is purely location-based, so it includes every validat
 ## Working with your results
 
 * TODO: talk about things people do next, especially Timelapse
+
+## Converting the SpeciesNet weights to timm
+
 
 ## Future work
 
