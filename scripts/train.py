@@ -40,7 +40,7 @@ from instances import prepare                       # noqa: E402
 from split import make_split                        # noqa: E402
 from dataset import CropDataset                     # noqa: E402
 from model import (build_model, freeze_backbone,    # noqa: E402
-                   DEFAULT_TIMM_MODEL, IMG_SIZE, NORM_MEAN, NORM_STD)
+                   DEFAULT_TIMM_MODEL, IMG_SIZE, NORM_MEAN, NORM_STD, SPECIESNET_TIMM_URL)
 
 INFERENCE_FORMAT = "speciesnet-finetune-classifier-v1"
 
@@ -64,15 +64,13 @@ def is_ddp_child():
 # --------------------------------------------------------------------------- #
 class LitClassifier(L.LightningModule):
     def __init__(self, num_classes, classes, timm_model, unfreeze_blocks, lr,
-                 weight_decay, epochs, class_weights=None, backbone_checkpoint=None,
-                 imagenet_pretrained=True):
+                 weight_decay, epochs, class_weights=None, backbone_checkpoint=None):
         super().__init__()
         # class_weights is data, not a hyperparameter we want re-instantiated on load.
         self.save_hyperparameters(ignore=["class_weights"])
         self.model = build_model(
             num_classes, timm_model=timm_model,
-            speciesnet_checkpoint=backbone_checkpoint,
-            imagenet_pretrained=imagenet_pretrained)
+            speciesnet_checkpoint=backbone_checkpoint)
         self.n_trainable, self.n_total = freeze_backbone(self.model, unfreeze_blocks)
         if class_weights is not None:
             self.register_buffer("class_weights", class_weights)
@@ -290,8 +288,10 @@ def parse_args(argv=None):
     p.add_argument("--unfreeze-blocks", type=int, default=2,
                    help="0=head only, N=last N backbone stages, -1=all")
     p.add_argument("--timm-model", default=DEFAULT_TIMM_MODEL)
-    p.add_argument("--backbone-checkpoint",
-                   help="converted SpeciesNet timm checkpoint; if omitted, uses ImageNet weights")
+    p.add_argument("--backbone-checkpoint", default=SPECIESNET_TIMM_URL,
+                   help="converted SpeciesNet timm checkpoint (URL or local path) to start "
+                   "from; defaults to the released checkpoint. Pass 'imagenet' to start from "
+                   "ImageNet weights instead (only for checking that a setup runs).")
     p.add_argument("--weighted-loss", action="store_true",
                    help="weight the loss by inverse class frequency")
     p.add_argument("--checkpoint-every-n-epochs", type=int, default=1)
@@ -360,11 +360,11 @@ def main(argv=None):
         num_classes=len(classes), classes=classes, timm_model=config["timm_model"],
         unfreeze_blocks=config["unfreeze_blocks"], lr=config["lr"],
         weight_decay=config["weight_decay"], epochs=config["epochs"],
-        class_weights=class_weights, backbone_checkpoint=config["backbone_checkpoint"],
-        imagenet_pretrained=config["backbone_checkpoint"] is None)
+        class_weights=class_weights, backbone_checkpoint=config["backbone_checkpoint"])
+    bc = config["backbone_checkpoint"]
+    init_desc = "ImageNet (stand-in)" if (not bc or bc == "imagenet") else ("SpeciesNet: " + bc)
     model_info = {"timm_model": config["timm_model"], "num_classes": len(classes),
-                  "init": ("SpeciesNet: " + config["backbone_checkpoint"])
-                  if config["backbone_checkpoint"] else "ImageNet (stand-in)",
+                  "init": init_desc,
                   "n_trainable": model.n_trainable, "n_total": model.n_total}
 
     # Write the split assignment and an initial summary (so the data/split report

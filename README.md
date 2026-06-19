@@ -261,7 +261,7 @@ TODO: re-write this section once the default is to automatically download weight
 
 Fine-tuning starts from a PyTorch copy of SpeciesNet's EfficientNetV2-M backbone.  Download the pre-converted checkpoint, `speciesnet_timm.pt`, from [TODO: add release link], and pass it with `--backbone-checkpoint`.  If you leave that option off, the script falls back to generic ImageNet weights, which is only useful for checking that your setup runs at all; for real results you want the SpeciesNet weights.
 
-That checkpoint is produced by converting SpeciesNet's original Keras weights into a `timm` model.  You do not need to run that conversion yourself (it needs a separate environment; see `requirements-conversion.txt` and "Other approaches"), because the download above already did it once.
+That checkpoint is produced by converting SpeciesNet's original Keras weights into a `timm` model.  You do not need to run that conversion yourself (it needs a separate environment; see `requirements-conversion.txt` and "Converting the SpeciesNet weights to timm"), because the download above already did it once.
 
 How faithful is the converted model?  We compared it against the officially released PyTorch SpeciesNet on 4,837 random animal crops, looking at each model's top prediction.  When the original model is confident, the two agree almost perfectly: 97% agreement at confidence above 0.5, 99.3% above 0.7, and 99.8% above 0.9 (and 92% across all crops, including very low-confidence ones).  The few disagreements are low-confidence, visually ambiguous cases (for example one gazelle species versus another).  In short, the converted weights are a faithful starting point.
 
@@ -425,6 +425,45 @@ One subtlety: this subset is purely location-based, so it includes every validat
 
 ## Converting the SpeciesNet weights to timm
 
+Tutorial users do not need this section: the fine-tuning code will automatically download the pre-converted `speciesnet_timm.pt`.  This section documents how that file was produced.
+
+The conversion uses Peter Bull's [speciesnet-convert](https://github.com/pjbull/speciesnet-convert), which ports SpeciesNet's original Keras weights into a `timm` EfficientNetV2-M model.  It relies on TensorFlow, which is why it runs in a separate environment from the rest of the tutorial: TensorFlow versions before 2.15 require Python 3.11 or earlier, whereas the training environment uses Python 3.12.
+
+**Create a separate Python 3.11 environment** and install the conversion dependencies (listed in this repo's `requirements-conversion.txt`):
+
+```bash
+mamba create -n speciesnet-conversion python=3.11 pip -y
+mamba activate speciesnet-conversion
+pip install -r requirements-conversion.txt
+```
+
+**Clone the conversion repo** and cd into the cloned repo:
+
+```bash
+git clone https://github.com/pjbull/speciesnet-convert
+cd speciesnet-convert
+```
+
+**Download the SpeciesNet Keras weights** from Kaggle (this tutorial used release `v4.0.0a`, version 3).  Peter's repo has a `make download_speciesnet` target that does this; the underlying download is:
+
+```bash
+curl -L -o model.tar.gz "https://www.kaggle.com/api/v1/models/google/speciesnet/keras/v4.0.0a/3/download"
+tar -xzf model.tar.gz
+```
+
+This produces the model file `always_crop_99710272_22x8_v12_epoch_00148.keras` and its label list `always_crop_99710272_22x8_v12_epoch_00148.labels.txt`.
+
+**Run the conversion**:
+
+```bash
+python -m speciesnet_convert.convert \
+    --labels_path always_crop_99710272_22x8_v12_epoch_00148.labels.txt \
+    --variant m \
+    --save_path speciesnet_timm.pt \
+    always_crop_99710272_22x8_v12_epoch_00148.keras
+```
+
+`--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet (see the agreement figures under "Fine-tuning").
 
 ## Future work
 
