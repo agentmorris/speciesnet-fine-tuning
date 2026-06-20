@@ -358,7 +358,30 @@ def write_image_splits(run_folder, data_csv, train_inst, val_inst):
 
 def resolve_config(args):
     """
-    Return (config dict, run_folder, resuming).
+    Determine the run configuration, distinguishing a fresh run from a resume.
+
+    On a resume (args.resume is set), the configuration is loaded from config.json
+    in the existing run folder, so the run continues with identical data and model
+    settings and the other command-line arguments are ignored. On a fresh run, the
+    four required arguments (data_csv, image_root, md_results, run_folder) are
+    checked, and the config is built from the [CONFIG_KEYS] attributes of [args]
+    (so their defaults apply). Only the CONFIG_KEYS settings are captured here;
+    runtime-only flags such as --devices and --limit-batches are read from [args]
+    elsewhere, so they may differ across a resume. This function only reads or
+    assembles the config; the matching config.json is written later, by
+    run_training(), and only on a fresh run.
+
+    Args:
+        args (argparse.Namespace): parsed command-line arguments (see parse_args())
+
+    Returns:
+        tuple: a 3-tuple (config, run_folder, resuming). config (dict) holds the
+        CONFIG_KEYS settings; run_folder (str) is the run's output folder; resuming
+        (bool) is True when continuing an existing run
+
+    Raises:
+        SystemExit: on a fresh run, if any of --data-csv, --image-root,
+            --md-results, or --run-folder is missing
     """
 
     if args.resume:
