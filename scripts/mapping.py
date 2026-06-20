@@ -1,3 +1,5 @@
+#%% Header
+
 """
 mapping.py
 
@@ -19,21 +21,39 @@ Mapping is a single pass (no chaining): if you map A -> B and B -> C, an A
 becomes B, not C. A duplicate "input" is an error.
 """
 
+#%% Imports and constants
+
 import csv
 
 # Reserved value in the "output" column meaning "drop this category".
 REMOVE_TOKEN = "remove"
 
 
-def load_mapping(path):
-    """Read a mapping CSV.
+#%% Support functions
 
-    Returns a dict mapping input-category -> output-category, where the value is
-    None for categories to drop. Rows with an empty output are omitted (they
-    mean "leave unchanged"). Raises ValueError on malformed input.
+def load_mapping(path):
     """
+    Read a category mapping CSV.
+
+    Args:
+        path (str): path to the mapping CSV; must have "input" and "output"
+            columns (any other columns are ignored)
+
+    Returns:
+        dict: maps each input category name to its output category name, or to
+        None for categories to drop (output "remove"). Rows with an empty output
+        are omitted, since leaving a category unchanged is identical to not
+        listing it at all
+
+    Raises:
+        ValueError: if the file is empty, is missing the "input" or "output"
+            column, has an empty "input" value, or lists the same input twice
+    """
+
     mapping = {}
+
     with open(path, newline="", encoding="utf-8-sig") as f:
+
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
             raise ValueError("mapping file '%s' is empty" % path)
@@ -43,7 +63,9 @@ def load_mapping(path):
                 "mapping file '%s' must have columns 'input' and 'output' "
                 "(found: %s)" % (path, reader.fieldnames))
         col = {v: k for k, v in norm.items()}
+
         for line_num, row in enumerate(reader, start=2):  # line 1 is the header
+
             inp = (row.get(col["input"]) or "").strip()
             out = (row.get(col["output"]) or "").strip()
             if inp == "":
@@ -56,21 +78,46 @@ def load_mapping(path):
             if out == "":
                 continue  # leave this category unchanged
             mapping[inp] = None if out.lower() == REMOVE_TOKEN else out
+
+        # ...for each line
+
+    # ...with open(...)
+
     return mapping
 
 
 def apply_mapping(category, mapping):
-    """Return the mapped category name, or None if the category should be dropped."""
+    """
+    Apply a mapping to a single category name.
+
+    Args:
+        category (str): a category name from the data
+        mapping (dict): a mapping as returned by load_mapping()
+
+    Returns:
+        str: the mapped category name, or the original [category] if it is not
+        listed in [mapping]; None if the category should be dropped (it was mapped
+        to "remove")
+    """
+
     return mapping.get(category, category)
 
 
 def mapping_warnings(mapping, known_categories):
-    """Return a list of non-fatal warning strings about a mapping.
-
-    Flags mapping inputs that don't appear in the data (likely typos), and
-    outputs that are themselves inputs (which would imply chaining, which we
-    don't do).
     """
+    Find likely mistakes in a mapping, returned as non-fatal warning strings.
+
+    Flags mapping inputs that don't appear in the data (likely typos), and outputs
+    that are themselves inputs (which would imply chaining, which is not done).
+
+    Args:
+        mapping (dict): a mapping as returned by load_mapping()
+        known_categories (set): the category names actually present in the data
+
+    Returns:
+        list: a list of warning strings (str); empty if no problems are found
+    """
+
     warnings = []
     for inp in mapping:
         if inp not in known_categories:

@@ -3,7 +3,7 @@
 """
 train.py
 
-Fine-tune SpeciesNet (a timm EfficientNetV2-M) on your own camera-trap data.
+Fine-tune SpeciesNet (a timm EfficientNetV2-M) on your own camera trap data.
 
 Inputs are the data CSV (filename, category, location), the image folder, and a
 MegaDetector results file; the script crops to animal boxes, splits cameras into
@@ -11,14 +11,17 @@ train/val, optionally remaps/merges/drops classes, freezes part of the backbone,
 and trains. Everything for one run is written to a required run folder.
 
 Fresh run:
+
   python scripts/train.py --data-csv data.csv --image-root IMAGES \\
       --md-results md.json --run-folder runs/myrun [options]
 
 Resume an interrupted run (needs only the folder):
+
   python scripts/train.py --resume runs/myrun
 
 See the README "Fine-tuning" section for the full walkthrough.
 """
+
 
 #%% Imports and constants
 
@@ -29,21 +32,27 @@ import os
 import re
 import sys
 import platform
+
 from pathlib import Path
 
 import torch
+import timm
+
 import torch.nn as nn
 import lightning as L
+
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
 from lightning.pytorch.loggers import CSVLogger
-import timm
 from torchmetrics.classification import MulticlassAccuracy
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from instances import prepare, load_csv_rows        # noqa: E402
-from split import make_split                        # noqa: E402
-from dataset import CropDataset                     # noqa: E402
-from model import (build_model, freeze_backbone,    # noqa: E402
+file_dir = os.path.dirname(os.path.abspath(__file__))
+if file_dir not in sys.path:
+    sys.path.insert(0, file_dir)
+
+from instances import prepare_instance_list, load_csv_rows
+from split import make_split
+from dataset import CropDataset
+from model import (build_model, freeze_backbone,
                    DEFAULT_TIMM_MODEL, IMG_SIZE, NORM_MEAN, NORM_STD, SPECIESNET_TIMM_URL)
 
 INFERENCE_FORMAT = "speciesnet-finetune-classifier-v1"
@@ -122,6 +131,22 @@ class LitClassifier(L.LightningModule):
 
 
 def compute_class_weights(instances, classes):
+    """
+    Compute inverse-frequency class weights for a weighted loss.
+
+    Each class gets weight total / (num_classes * count), so rarer classes are
+    up-weighted and the weights average to about 1.
+
+    Args:
+        instances (list of Instance): the training instances, each with a .category
+        classes (list of str): the ordered class names; the returned weights follow
+            this order
+
+    Returns:
+        torch.Tensor: a 1-D float tensor of per-class weights, indexed to match
+        [classes], suitable for nn.CrossEntropyLoss(weight=...)
+    """
+
     counts = {c: 0 for c in classes}
     for inst in instances:
         counts[inst.category] += 1
@@ -137,6 +162,20 @@ def read_best(run_folder, best_path, trainer):
     The best checkpoint's epoch is parsed from its filename; its validation
     metrics are looked up in metrics.csv. Falls back to the final-epoch metrics
     if the lookup fails.
+
+    Args:
+        run_folder (str): the run folder, which contains metrics.csv
+        best_path (str): path to the best checkpoint; its epoch is parsed from the
+            filename (e.g. "epoch003-..."), and it may be None or empty
+        trainer (lightning.Trainer): the trainer, used only as a fallback source of
+            validation metrics (trainer.callback_metrics) when metrics.csv has no
+            matching row
+
+    Returns:
+        tuple: a 2-tuple (best_epoch, metrics). best_epoch (int or None) is the
+        epoch parsed from [best_path], or None if it could not be parsed; metrics
+        (dict) maps validation metric names ("val_loss", "val_acc",
+        "val_macro_acc") to their values at that epoch, rounded to four places
     """
 
     best_epoch = None
@@ -160,6 +199,11 @@ def read_best(run_folder, best_path, trainer):
 
 
 def find_latest_checkpoint(run_folder):
+    """
+    Find the most recent .ckpt file (as determined by file time) in
+    [run_folder].
+    """
+
     ckpt_dir = Path(run_folder) / "checkpoints"
     last = ckpt_dir / "last.ckpt"
     if last.exists():
@@ -168,8 +212,13 @@ def find_latest_checkpoint(run_folder):
     return str(ckpts[-1]) if ckpts else None
 
 
-def export_inference_checkpoint(best_ckpt_path, out_path, timm_model, num_classes,
-                                classes, epoch, metrics):
+def export_inference_checkpoint(best_ckpt_path,
+                                out_path,
+                                timm_model,
+                                num_classes,
+                                classes,
+                                epoch,
+                                metrics):
     """
     Write a compact, self-describing checkpoint for predict.py.
     """
@@ -196,8 +245,13 @@ def export_inference_checkpoint(best_ckpt_path, out_path, timm_model, num_classe
     }, out_path)
 
 
-def write_summary(run_folder, config, prep_report, split_report, classes,
-                  model_info=None, final=None):
+def write_summary(run_folder,
+                  config,
+                  prep_report,
+                  split_report,
+                  classes,
+                  model_info=None,
+                  final=None):
     lines = []
     a = lines.append
     a("# SpeciesNet fine-tuning run\n")
@@ -326,11 +380,13 @@ def run_training(args):
     Run a full training (or resume) given parsed command-line args.
     """
 
+    # Resolve the run config (from CLI for a fresh run, or from the run folder
+    # when resuming) and seed all RNGs for reproducibility
     config, run_folder, resuming = resolve_config(args)
     L.seed_everything(config["seed"], workers=True)
 
-    # Fresh-run folder management happens only in the launcher process.
-    if not resuming and not is_ddp_child():
+    # Fresh-run folder management happens only in the launcher process
+    if (not resuming) and (not is_ddp_child()):
         if os.path.exists(run_folder):
             raise SystemExit(
                 "ERROR: run folder '%s' already exists. Use --resume to continue it, "
@@ -339,8 +395,8 @@ def run_training(args):
         with open(os.path.join(run_folder, "config.json"), "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
 
-    # Data preparation (deterministic, so every DDP rank agrees).
-    instances, classes, prep_report = prepare(
+    # Data preparation (deterministic, so every DDP rank agrees)
+    instances, classes, prep_report = prepare_instance_list(
         config["data_csv"], config["md_results"], config["image_root"],
         mapping_path=config["mapping"], conf_threshold=config["conf_threshold"],
         max_boxes=config["max_boxes"], min_instances=config["min_instances"],
@@ -351,6 +407,7 @@ def run_training(args):
     train_inst = [i for i in instances if split[i.location] == "train"]
     val_inst = [i for i in instances if split[i.location] == "val"]
 
+    # Build the train/val datasets (crops are produced on the fly) and dataloaders
     train_ds = CropDataset(train_inst, class_to_idx, config["image_root"], train=True)
     val_ds = CropDataset(val_inst, class_to_idx, config["image_root"], train=False)
     train_loader = torch.utils.data.DataLoader(
@@ -362,6 +419,8 @@ def run_training(args):
         num_workers=config["workers"], pin_memory=True,
         persistent_workers=config["workers"] > 0)
 
+    # Build the model (optionally with a class-weighted loss) plus a small
+    # model-info summary for the run report
     class_weights = compute_class_weights(train_inst, classes) if config["weighted_loss"] else None
     model = LitClassifier(
         num_classes=len(classes), classes=classes, timm_model=config["timm_model"],
@@ -375,13 +434,13 @@ def run_training(args):
                   "n_trainable": model.n_trainable, "n_total": model.n_total}
 
     # Write the split assignment and an initial summary (so the data/split report
-    # exists even if training fails).
+    # exists even if training fails)
     if not is_ddp_child():
         write_split(run_folder, split)
         write_image_splits(run_folder, config["data_csv"], train_inst, val_inst)
         write_summary(run_folder, config, prep_report, split_report, classes, model_info)
 
-    # Devices / strategy (gloo on native Windows, NCCL elsewhere).
+    # Devices / strategy (gloo on native Windows, NCCL elsewhere)
     n_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
     if args.devices == "auto":
         devices, n_proc = ("auto", max(1, n_gpus))
@@ -403,6 +462,8 @@ def run_training(args):
         strategy = "auto"
     precision = "bf16-mixed" if accelerator == "gpu" else "32-true"
 
+    # Checkpoint every epoch (save_top_k=-1) plus a "last" for resuming, and
+    # optionally stop early when val macro-accuracy plateaus
     callbacks = [
         ModelCheckpoint(
             dirpath=os.path.join(run_folder, "checkpoints"),
@@ -416,6 +477,7 @@ def run_training(args):
         callbacks.append(EarlyStopping(monitor="val_macro_acc", mode="max",
                                        patience=config["patience"]))
 
+    # Set up the CSV metrics logger (writes metrics.csv) and the Lightning trainer
     logger = CSVLogger(save_dir=run_folder, name="", version="")
     limit = args.limit_batches or 1.0
     trainer = L.Trainer(
@@ -424,11 +486,13 @@ def run_training(args):
         logger=logger, callbacks=callbacks, log_every_n_steps=10,
         limit_train_batches=limit, limit_val_batches=limit)
 
+    # Resume from the most recent checkpoint if resuming, then run training
     ckpt_path = find_latest_checkpoint(run_folder) if resuming else None
     trainer.fit(model, train_loader, val_loader, ckpt_path=ckpt_path)
 
-    # Export the best model + final summary (rank 0 only).
+    # Export the best model + final summary (rank 0 only)
     if trainer.is_global_zero:
+
         cb = trainer.checkpoint_callback
         best = cb.best_model_path or find_latest_checkpoint(run_folder)
         best_epoch, best_metrics = read_best(run_folder, best, trainer)
@@ -443,6 +507,8 @@ def run_training(args):
         print("Done. Best checkpoint: %s" % best)
         print("Inference model: %s" % inf_path)
         print("Summary: %s" % os.path.join(run_folder, "summary.md"))
+
+# ...def run_training(...)
 
 
 #%% Command-line driver

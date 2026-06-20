@@ -1,3 +1,5 @@
+#%% Header
+
 """
 model.py
 
@@ -17,6 +19,8 @@ timm's ImageNet weights (which strictly want mean/std=0.5); that is only for
 checking that a setup runs, not for real results.
 """
 
+#%% Imports and constants
+
 import timm
 import torch
 
@@ -28,12 +32,18 @@ NORM_STD = (1.0, 1.0, 1.0)
 # Default starting weights: the converted SpeciesNet EfficientNetV2-M checkpoint,
 # downloaded and cached by torch.hub on first use.
 SPECIESNET_TIMM_URL = "https://lila.science/speciesnet-timm"
+
 # Pass this instead of a URL/path to start from timm's ImageNet weights.
 IMAGENET_SENTINEL = "imagenet"
 
 
+#%% Support functions
+
 def _load_checkpoint(src):
-    """Load a checkpoint from a local path or an http(s) URL (URLs are cached)."""
+    """
+    Load a checkpoint from a local path or an http(s) URL (URLs are cached).
+    """
+
     if str(src).startswith(("http://", "https://")):
         return torch.hub.load_state_dict_from_url(src, map_location="cpu", weights_only=False)
     return torch.load(src, map_location="cpu", weights_only=False)
@@ -41,7 +51,8 @@ def _load_checkpoint(src):
 
 def build_model(num_classes, timm_model=DEFAULT_TIMM_MODEL,
                 speciesnet_checkpoint=SPECIESNET_TIMM_URL):
-    """Create the classifier.
+    """
+    Create the classifier.
 
     speciesnet_checkpoint may be a URL or a local path to converted SpeciesNet
     weights (pjbull "speciesnet-convert" format: a dict containing a 'state_dict'),
@@ -51,13 +62,14 @@ def build_model(num_classes, timm_model=DEFAULT_TIMM_MODEL,
     IMAGENET_SENTINEL ("imagenet") to start from timm's ImageNet weights instead,
     which is only useful for checking that a setup runs.
     """
+
     if not speciesnet_checkpoint or speciesnet_checkpoint == IMAGENET_SENTINEL:
         return timm.create_model(timm_model, pretrained=True, num_classes=num_classes)
 
     model = timm.create_model(timm_model, pretrained=False, num_classes=num_classes)
     ckpt = _load_checkpoint(speciesnet_checkpoint)
     state_dict = ckpt.get("state_dict", ckpt) if isinstance(ckpt, dict) else ckpt
-    # Drop the original (full-taxonomy) classifier so our fresh head survives.
+    # Drop the original (full-taxonomy) classifier so our fresh head survives
     state_dict = {k: v for k, v in state_dict.items()
                   if not (k.startswith("classifier.") or k.startswith("head."))}
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
@@ -74,7 +86,8 @@ def build_model(num_classes, timm_model=DEFAULT_TIMM_MODEL,
 
 
 def freeze_backbone(model, unfreeze_blocks):
-    """Freeze the backbone, then unfreeze the head and the last N block-stages.
+    """
+    Freeze the backbone, then unfreeze the head and the last N block-stages.
 
     unfreeze_blocks ==  0 -> train only the classifier head (+ final conv);
     unfreeze_blocks ==  N -> additionally unfreeze the last N stages of model.blocks;
@@ -82,13 +95,14 @@ def freeze_backbone(model, unfreeze_blocks):
 
     Returns (n_trainable, n_total) parameter-tensor counts for reporting.
     """
+
     if unfreeze_blocks == -1:
         for p in model.parameters():
             p.requires_grad = True
     else:
         for p in model.parameters():
             p.requires_grad = False
-        # Always train the classifier head and the final conv/bn.
+        # Always train the classifier head and the final conv/bn
         for attr in ("classifier", "conv_head", "bn2"):
             mod = getattr(model, attr, None)
             if mod is not None:

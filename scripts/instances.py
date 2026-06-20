@@ -156,16 +156,51 @@ def md_vs_disk(md_files, image_folder, scan_disk=True, example_cap=10):
     }
 
 
-def prepare(csv_path,
-            md_path,
-            image_folder,
-            mapping_path=None,
-            conf_threshold=0.3,
-            max_boxes=5,
-            min_instances=100,
-            scan_disk=True):
+def prepare_instance_list(csv_path,
+                          md_path,
+                          image_folder,
+                          mapping_path=None,
+                          conf_threshold=0.3,
+                          max_boxes=5,
+                          min_instances=100,
+                          scan_disk=True):
     """
-    Build the training instance list. Returns (instances, classes, report).
+    Build the list of training instances (crops) from a data CSV and a
+    MegaDetector results file.
+
+    For each CSV row the category is remapped (if a mapping is given), the image's
+    animal boxes are selected (confidence >= [conf_threshold], at most [max_boxes]
+    per image, highest confidence first), and one Instance is produced per
+    selected box. Categories with fewer than [min_instances] instances, counted
+    after mapping, are then dropped. Images missing from disk, absent from the MD
+    file, or with no surviving box are skipped and counted in the report rather
+    than raising; the only hard error is if no instances survive at all.
+
+    Args:
+        csv_path (str): path to the data CSV, with columns filename, category, and
+            location
+        md_path (str): path to the MegaDetector results .json file
+        image_folder (str): base folder the CSV filenames are relative to, used to
+            check that images exist on disk
+        mapping_path (str, optional): path to a category mapping CSV (input,output);
+            if None, categories are used as-is
+        conf_threshold (float, optional): minimum MegaDetector confidence for an
+            animal box to become an instance (default 0.3)
+        max_boxes (int, optional): maximum number of animal boxes to keep per
+            image, highest confidence first (default 5)
+        min_instances (int, optional): drop any category with fewer than this many
+            instances, counted after mapping (default 100)
+        scan_disk (bool, optional): if True, walk [image_folder] to count images on
+            disk that are absent from the MD file, for the report (default True)
+
+    Returns:
+        tuple: a 3-tuple (instances, classes, report). instances (list of Instance)
+        has one entry per kept animal box, each with filename, bbox, conf, mapped
+        category, and location; classes (list of str) is the sorted list of
+        surviving category names, which become the model's classes; report (dict)
+        summarizes the preparation (row and instance counts, per-category counts,
+        dropped categories, non-fatal warnings, and MD-versus-disk statistics) and
+        is used to write the run summary
     """
 
     warnings = []
@@ -232,6 +267,7 @@ def prepare(csv_path,
         "n_classes": len(classes),
         "warnings": warnings,
     }
+
     report.update(md_stats)
     report.update(md_vs_disk(md_files, image_folder, scan_disk=scan_disk))
 
@@ -243,4 +279,4 @@ def prepare(csv_path,
 
     return instances, classes, report
 
-# ...def prepare(...)
+# ...def prepare_instance_list(...)
