@@ -68,6 +68,16 @@ So, consider grouping together categories that are very small in terms of traini
 
 Because we will be training on animals that are cropped out of their original images with MegaDetector, if you have a group of four elephants in an image, that "counts" as four examples.
 
+## Overview of the process
+
+This is basically what's going to happen in the rest of this tutorial:
+
+1. Setting up your environment: cloning this reopsitory, installing Python, etc.
+2. Getting your data into the format the tutorial code needs to figure out which images contain which species.
+3. Running [MegaDetector](https://github.com/agentmorris/MegaDetector) on your images.
+4. Creating your fine-tuned model.
+5. Running your fine-tuned model.
+
 ## Setting up your environment
 
 The instructions in this tutorial will assume two things:
@@ -102,13 +112,13 @@ That was a lot of random Python gibberish, I know, but if anything goes wrong, f
 
 ### The format this tutorial expects
 
-This tutorial does not expect you to reorganize your images on disk. Your images can stay wherever they already are (one big folder, or a tree of subfolders — it doesn't matter). Instead, you will describe your dataset with a .csv file with one row per labeled image and the following three columns:
+This tutorial does not require any particular organization of your files on disk.  Instead, you will describe your dataset with a .csv file with one row per labeled image, and the following three columns:
 
 | Column | What it contains |
 |---|---|
-| `filename` | The path to one image (see "How filenames are resolved" below). |
-| `category` | The label for that image... this usually a taxon (`zebra`, `impala`, `rodent`) or the label `blank`, but it can also include any other class you want the model to learn. |
-| `location` | The camera (a.k.a. "deployment" or "site") the image came from.  This is not latitude and longitude, just a unique name for each camera. |
+| `filename` | The path to one image (see "how filenames are resolved" below). |
+| `category` | The label for that image... this usually a taxon (`zebra`, `impala`, `rodent`) or a non-taxonomic label like `blank`, but it can also include any other class you want the model to learn. |
+| `location` | The camera (aka "deployment" or "site") the image came from.  This is not latitude and longitude, just a unique name for each camera. |
 
 A minimal CSV looks like this:
 
@@ -121,26 +131,33 @@ filename,category,location
 
 Two things to know about this format:
 
-* **One image can appear in more than one row.** If a single photo contains both a zebra and an impala, it can have a `zebra` row and an `impala` row. (The converter below decides whether to do this — see `--multiple-label-handling`.)
-* **The class names are entirely up to you.** They become the classes your fine-tuned model predicts. Whatever string you put in `category` is what the model learns; `blank` is the conventional name for "no animal", and we recommend keeping it.
+* **An image can appear in more than one row.**  If a single photo contains both a zebra and an impala, it can have a `zebra` row and an `impala` row.
+* **The class names are entirely up to you.**  Whatever you put in the "category" column will be what your fine-tuned model predicts.  `blank` is the typical name for "no animal", and we recommend keeping it.
 
 ### Why `location` matters
 
-A camera-trap dataset of 1,000,000 images might come from only ~200 cameras, and the images from a single camera are highly repetitive (same background, same lighting, often the same individual animals passing repeatedly). If you let images from one camera land in both your training and validation sets, your validation accuracy will look great but will be a lie: the model is partly being tested on scenes it already memorized.
+A camera-trap dataset of 1,000,000 images might come from only ~200 cameras, and the images from a single camera are highly repetitive (same background, same lighting, often the same individual animals passing repeatedly). If you let images from one camera land in both your training and validation sets, your validation accuracy will look great, but won't reflect how your model will perform in the real world.
 
-So the right thing to do is to split the data by camera: every image from a given camera goes entirely into training *or* entirely into validation, never both.  Code that you will use later in this tutorial does that splitting for you, but to do it, it needs to know which images share a camera.  That is the only reason the `location` column exists.  You don't have to think about the splitting itself; you just have to tell us the camera for each image.
+So the right thing to do is to split the data by camera: every image from a given camera goes entirely into training *or* entirely into validation, never both.  Code that you will use later in this tutorial does that splitting for you, but to do it, it needs to know which images share a camera.  That is the only reason the `location` column exists.  You don't have to think about the splitting itself; you just have to provide the location for each image.
 
-If you genuinely have no camera/location information, you can put the same value (e.g. `unknown`) in every row, but be aware that your validation numbers will then be optimistic, and treat them with suspicion.
+If you genuinely have no camera/location information, you can put the same value (e.g. `unknown`) in every row, but in that scenario, take your validation numbers with a grain of salt.
 
 ### How filenames are resolved
 
-The `filename` value can be any of three things, and later steps in the tutorial will handle all three:
+For the examples we provide in this section, let's imagine we have the following image files:
 
-* **Relative to the CSV file's own location** (e.g. the CSV sits in your image folder and `filename` is just `2018_NB47_000508.JPG`).
-* **Relative to an image root** that you pass to the later fine-tuning steps (e.g. `--image-root /data/maasai-mara`).
-* **An absolute path** (e.g. `/data/maasai-mara/2018_NB47_000508.JPG`).
+* c:/my_images/camera001/image001.jpg
+* c:/my_images/camera002/image001.jpg
 
-You don't have to choose now; just be consistent, and remember where your images actually are.
+The `filename` value in a row in the .csv file can be any of the following:
+
+* **Filename relative to the csv file's location**.  For example, if your .csv file is in "c:/my_images", "camera001/image001.jpg" is a valid value for `filename`.
+* **Relative to an image root** that you pass in separately.  For example, you can put your .csv file in a random folder, and specify --image-root as "c:/my_images", and in that case, "camera001/image001.jpg" is a valid value for `filename`.
+* **An absolute path** (e.g. "c:/my_images/camera001/image001.jpg").
+
+### Creating your .csv file
+
+Everyone's data is in a different format, so we can't provide universal guidelines for preparing your .csv file.  As long as you can get your data into the above format (a .csv with `filename`, `category`, and `location` columns), everything in the rest of this tutorial is agnostic to how you made that file.  If you would like help getting your data into that format, feel free to <a href="mailto:agentmorris@gmail.com">email me</a>.
 
 ### If your data is already in COCO Camera Traps format
 
@@ -166,36 +183,30 @@ The options:
 
 The default, `omit`, throws away any image that contains more than one category.  This is because we have no way to determine which animal in the image goes with which category.
 
-### If your data is in some other format
-
-For now, the only converter provided is COCO Camera Traps → CSV. If your labels live somewhere else (a different JSON schema, a database export, a set of per-camera spreadsheets, or images already sorted into folders by species), you can produce the three-column CSV yourself with whatever tool you're comfortable in — R, Excel, or a few lines of Python. As long as the result has `filename`, `category`, and `location` columns, the rest of the tutorial doesn't care how you made it. (We expect to add more converters over time, including one for the common case of images already organized into per-species and/or per-location folders.)
-
 ## Running MegaDetector
 
 * TODO: talk about ways to run MD, AddaxAI, Python, etc.
 
-## Visualizing your training data before training
-
-TODO
-
 ## Preparing a mapping file
 
-A mapping file is an optional CSV that renames, merges, or drops your categories at training time.  It is kept separate from your data CSV on purpose: the data CSV stays a literal record of your labels, while the mapping captures modeling decisions, so you can try different groupings without ever editing your data.
+A mapping file is an optional .csv file that renames, merges, or drops some of your categories at training time.  It is kept separate from your data .csv on purpose: the data .csv is a literal record of your labels, while the mapping captures modeling decisions, so you can try different groupings without editing your data.
 
-### Why you might remap
+### Why you might remap your categories
 
 Common reasons:
 
 * **The same animal is labeled two ways.** For example `wildebeest` and `blue_wildebeest`, or a misspelling sitting alongside the correct spelling.  Map them to one name so they count as a single class.
 * **You have splits you do not want the model to make.** Sex or age labels like `lion`, `lion_male`, and `lion_female` are usually better merged into `lion`, unless you specifically need to tell them apart and have enough examples of each.
-* **Some classes are too rare or too hard to tell apart.** A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, and so on) usually gives a more useful model than dozens of classes the model can barely learn.
-* **Some labels are not real classes.** A vague catch-all like `animal`, or a junk label, can be dropped entirely.
+* **Some classes are too rare or too hard to tell apart.** A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, etc.) usually gives a more useful model than dozens of classes the model can barely learn.
+* **Some labels are not real classes.** A vague catch-all like `animal`, or a junk label, can often be dropped entirely.
 
-You do not have to remap anything: if you skip the mapping file, every category (above the minimum count) is trained as its own class.
+You aren't required to remap anything: if you skip the mapping file, every category (above the minimum count) is trained as its own class.
 
 ### The mapping CSV format
 
-The mapping CSV has two columns that matter, `input` and `output` (any other columns, such as the `count` column described below, are ignored):
+The mapping .csv has two columns that matter: `input` and `output`.  Any other columns, such as the `count` column described below, are ignored.
+
+Here is an example of what a mapping .csv file looks like:
 
 ```csv
 input,output
@@ -212,14 +223,14 @@ zebra,
 The `output` column decides what happens to each `input` category:
 
 * **A name** renames the category; several inputs sharing one output are merged (so `hyena_spotted` and `hyena_striped` above both become `hyena`).
-* **The exact word `remove`** drops the category entirely; its images contribute nothing to training.
-* **Left blank** leaves the category unchanged, which is identical to not listing it at all (the `zebra` row above is just documentation; you could delete it).
+* **The word `remove`** drops the category entirely; its images contribute nothing to training.
+* **If the output column is left blank**, the category is unchanged, which is identical to not listing it at all.  For example, the `zebra` row above is just documentation; you could delete it.
 
 Two rules: each `input` may appear only once, and the mapping is applied in a single pass, so if you map `A` to `B` and also `B` to `C`, an `A` becomes `B`, not `C`.
 
-### Generating a template
+### Generating a template mapping file
 
-You can write the mapping CSV by hand, but if your labels are in COCO Camera Traps format it is easier to start from a generated template.  `scripts/coco_to_mapping_file.py` lists every category for you, sorted from most to least common, with the `output` column left blank to fill in:
+You can write the mapping .csv by hand, but if your labels are in COCO Camera Traps format, it may be easier to start from a generated template.  `scripts/coco_to_mapping_file.py` lists every category for you, sorted from most to least common, with the `output` column left blank to fill in:
 
 ```bash
 python scripts/coco_to_mapping_file.py path/to/labels.json mapping.csv
@@ -252,22 +263,11 @@ Before fine-tuning you should already have:
 
 * **A data CSV** with `filename`, `category`, and `location` columns (see "Preparing your data").
 * **A MegaDetector results file** covering those images (see "Running MegaDetector").
-* **The SpeciesNet starting weights** (see the next subsection).
 * **Optionally, a mapping file** to rename, merge, or drop classes (see "Preparing a mapping file").
 
-### Getting the SpeciesNet starting weights
+### Starting a fine-tuning run
 
-TODO: re-write this section once the default is to automatically download weights
-
-Fine-tuning starts from a PyTorch copy of SpeciesNet's EfficientNetV2-M backbone.  Download the pre-converted checkpoint, `speciesnet_timm.pt`, from [TODO: add release link], and pass it with `--backbone-checkpoint`.  If you leave that option off, the script falls back to generic ImageNet weights, which is only useful for checking that your setup runs at all; for real results you want the SpeciesNet weights.
-
-That checkpoint is produced by converting SpeciesNet's original Keras weights into a `timm` model.  You do not need to run that conversion yourself (it needs a separate environment; see `requirements-conversion.txt` and "Converting the SpeciesNet weights to timm"), because the download above already did it once.
-
-How faithful is the converted model?  We compared it against the officially released PyTorch SpeciesNet on 4,837 random animal crops, looking at each model's top prediction.  When the original model is confident, the two agree almost perfectly: 97% agreement at confidence above 0.5, 99.3% above 0.7, and 99.8% above 0.9 (and 92% across all crops, including very low-confidence ones).  The few disagreements are low-confidence, visually ambiguous cases (for example one gazelle species versus another).  In short, the converted weights are a faithful starting point.
-
-### Running a training run
-
-A minimal run looks like this (it is shown on several lines for readability; put it on one line, or use your shell's line-continuation character):
+A minimal run looks like this:
 
 ```bash
 python scripts/train.py \
@@ -366,16 +366,16 @@ By default the output is a MegaDetector-format results file: a copy of your inpu
 | Option | Default | What it does |
 |---|---|---|
 | `--image-root` | (required) | The folder the MegaDetector filenames are relative to. |
-| `--output` | (required) | Where to write the results (a MegaDetector-format `.json` by default). |
+| `--output` | (required) | Where to write the results (a [MegaDetector-format](http://lila.science/megadetector-output-format) .json by default). |
 | `--csv-output` | off | Write a flat per-box CSV to `--output` instead of MegaDetector format. |
 | `--conf-threshold` | `0.1` | Only classify animal boxes at or above this MegaDetector confidence. |
 | `--topk` | `1` | How many top predictions (with scores) to record per box. |
 | `--batch-size` | `32` | Crops classified per batch. |
 | `--device` | `auto` | `auto` picks a GPU if one is available, otherwise the CPU. |
 
-### The MegaDetector-format output
+### The MegaDetector format output
 
-In the default output, each classified animal detection gains a `classifications` list, ordered most likely first, where each entry pairs a class id (an index into the top-level `classification_categories`) with a score.  With `--topk 5` you get the top five classes per box.  Because the whole detection file is preserved, this output is exactly what MegaDetector's classification postprocessing expects, which is how the "Evaluation" step below works.
+The default output format follow the [MegaDetector output format](http://lila.science/megadetector-output-format).  This format is supported by the postprocessing tools in the [MegaDetector Python package](https://pypi.org/project/megadetector/), as well as by image review tools like [Timelapse](https://timelapse.ucalgary.ca/).
 
 ### The CSV output
 
@@ -392,10 +392,9 @@ With `--topk 3`, each row also carries `pred2_class`, `pred2_score`, `pred3_clas
 
 A few things to keep in mind:
 
-* **Only animal boxes are classified.** Person and vehicle detections from MegaDetector are never classified, and animal boxes below `--conf-threshold` are skipped.  In the MegaDetector-format output those detections are still present, just without a `classifications` entry; in the CSV output they do not appear at all.
+* **Only animal boxes are classified.** Person and vehicle detections from MegaDetector are never classified, and animal boxes below `--conf-threshold` are skipped.  In the MegaDetector-format output, those detections are still present, just without a `classifications` entry; in the CSV output they do not appear at all.
 * **`blank` is a prediction, not an absence of a box.** If you trained a `blank` class, the model can label an animal box as `blank` when it thinks the box is actually empty (a MegaDetector false positive).  An image where MegaDetector found no animal at all is "blank" in a different sense: it has no animal box to classify.
 * **The model only knows your classes.** It predicts from the label set you trained on, using your names, and has no knowledge of SpeciesNet's broader taxonomy or its geofence.  Anything outside your classes will be forced into the closest class you did train.
-* **Run it in your training environment.** Use the same environment you fine-tuned in; `predict.py` rebuilds the model from `model_best.pt` and needs the same packages.
 
 ## Evaluation
 
@@ -416,15 +415,20 @@ The result pairs naturally with the MegaDetector-format predictions from `predic
 
 One subtlety: this subset is purely location-based, so it includes every validation image in your COCO file, including any multi-species images that data preparation dropped under the default `omit`.  Those images have ground truth but no prediction, so they count as misses in the metrics.  This is usually a small fraction, but if it matters you can restrict the ground truth to the images you actually trained on.
 
-### Comparing to taxonomically-mapped SpeciesNet
-
-* TODO: describe restrict_to_taxa list, comparison script
-
 ## Working with your results
 
 * TODO: talk about things people do next, especially Timelapse
 
-## Converting the SpeciesNet weights to timm
+## Future work
+
+* TODO: Conversion and mapping file scripts for other input formats
+* TODO: Easier comparison to restrict_to_taxa_list
+
+## Topics you probably aren't interested in
+
+This section is documents scripts or tools in this repo that aren't relevant for typical fine-tuning scenarios.
+
+### Converting the SpeciesNet weights to timm
 
 Tutorial users do not need this section: the fine-tuning code will automatically download the pre-converted `speciesnet_timm.pt`.  This section documents how that file was produced.
 
@@ -466,6 +470,3 @@ python -m speciesnet_convert.convert \
 
 `--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet (see the agreement figures under "Fine-tuning").
 
-## Future work
-
-* TODO: Conversion and mapping file scripts for other input formats
