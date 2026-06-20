@@ -1,3 +1,5 @@
+#%% Header
+
 """
 predict.py
 
@@ -19,6 +21,9 @@ Usage:
       --image-root IMAGES --output predictions.json [--topk 5]
 """
 
+
+#%% Imports and environment
+
 import argparse
 import csv
 import json
@@ -33,6 +38,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dataset import build_transforms, crop_resize    # noqa: E402
 
 
+#%% Support functions
+
 def load_model(checkpoint_path, device):
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model = timm.create_model(ckpt["timm_model"], pretrained=False,
@@ -40,6 +47,28 @@ def load_model(checkpoint_path, device):
     model.load_state_dict(ckpt["state_dict"])
     model.eval().to(device)
     return model, ckpt
+
+
+#%% Core inference function
+
+
+#%% Command-line driver
+
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("checkpoint", help="model_best.pt from a training run")
+    p.add_argument("md_results", help="MegaDetector results .json")
+    p.add_argument("--image-root", required=True, help="folder the MD filenames are relative to")
+    p.add_argument("--output", required=True, help="output path (MD-format .json by default)")
+    p.add_argument("--csv-output", action="store_true",
+                   help="write a flat CSV (one row per classified box) instead of MD format")
+    p.add_argument("--conf-threshold", type=float, default=0.1,
+                   help="classify animal boxes at or above this MD confidence (default 0.1)")
+    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--topk", type=int, default=1)
+    p.add_argument("--device", default="auto", help="'auto', 'cpu', or 'cuda'")
+    return p.parse_args(argv)
 
 
 def main(argv=None):
@@ -128,24 +157,6 @@ def main(argv=None):
         n_classified = sum(1 for _, _, det in work if "classifications" in det)
         print("Wrote MegaDetector-format results to %s (classified %d animal boxes; "
               "all original detections preserved)" % (args.output, n_classified))
-
-
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("checkpoint", help="model_best.pt from a training run")
-    p.add_argument("md_results", help="MegaDetector results .json")
-    p.add_argument("--image-root", required=True, help="folder the MD filenames are relative to")
-    p.add_argument("--output", required=True, help="output path (MD-format .json by default)")
-    p.add_argument("--csv-output", action="store_true",
-                   help="write a flat CSV (one row per classified box) instead of MD format")
-    p.add_argument("--conf-threshold", type=float, default=0.1,
-                   help="classify animal boxes at or above this MD confidence (default 0.1)")
-    p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--topk", type=int, default=1)
-    p.add_argument("--device", default="auto", help="'auto', 'cpu', or 'cuda'")
-    return p.parse_args(argv)
-
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,5 @@
+#%% Header
+
 """
 train.py
 
@@ -17,6 +19,8 @@ Resume an interrupted run (needs only the folder):
 
 See the README "Fine-tuning" section for the full walkthrough.
 """
+
+#%% Imports and constants
 
 import argparse
 import csv
@@ -54,8 +58,13 @@ CONFIG_KEYS = [
 ]
 
 
+#%% Support functions
+
 def is_ddp_child():
-    """True if this process is a Lightning-spawned DDP worker (not the launcher)."""
+    """
+    True if this process is a Lightning-spawned DDP worker (not the launcher).
+    """
+
     return "LOCAL_RANK" in os.environ
 
 
@@ -111,9 +120,6 @@ class LitClassifier(L.LightningModule):
         return {"optimizer": opt, "lr_scheduler": sched}
 
 
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
 def compute_class_weights(instances, classes):
     counts = {c: 0 for c in classes}
     for inst in instances:
@@ -124,7 +130,8 @@ def compute_class_weights(instances, classes):
 
 
 def read_best(run_folder, best_path, trainer):
-    """Return (best_epoch, best_val_metrics) for the monitored best checkpoint.
+    """
+    Return (best_epoch, best_val_metrics) for the monitored best checkpoint.
 
     The best checkpoint's epoch is parsed from its filename; its validation
     metrics are looked up in metrics.csv. Falls back to the final-epoch metrics
@@ -161,7 +168,10 @@ def find_latest_checkpoint(run_folder):
 
 def export_inference_checkpoint(best_ckpt_path, out_path, timm_model, num_classes,
                                 classes, epoch, metrics):
-    """Write a compact, self-describing checkpoint for predict.py."""
+    """
+    Write a compact, self-describing checkpoint for predict.py.
+    """
+
     ckpt = torch.load(best_ckpt_path, map_location="cpu", weights_only=False)
     sd = ckpt["state_dict"]
     model_sd = {k[len("model."):]: v for k, v in sd.items() if k.startswith("model.")}
@@ -253,11 +263,11 @@ def write_summary(run_folder, config, prep_report, split_report, classes,
         f.write("\n".join(lines))
 
 
-# --------------------------------------------------------------------------- #
-# Main
-# --------------------------------------------------------------------------- #
 def write_split(run_folder, split):
-    """Write the camera-to-split assignment to split.csv (location, split)."""
+    """
+    Write the camera-to-split assignment to split.csv (location, split).
+    """
+
     with open(os.path.join(run_folder, "split.csv"), "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["location", "split"])
@@ -304,7 +314,10 @@ def parse_args(argv=None):
 
 
 def resolve_config(args):
-    """Return (config dict, run_folder, resuming)."""
+    """
+    Return (config dict, run_folder, resuming).
+    """
+
     if args.resume:
         run_folder = args.resume
         with open(os.path.join(run_folder, "config.json"), encoding="utf-8") as f:
@@ -316,6 +329,11 @@ def resolve_config(args):
     config = {k: getattr(args, k) for k in CONFIG_KEYS}
     return config, args.run_folder, False
 
+
+#%% Core training function
+
+
+#%% Command-line driver
 
 def main(argv=None):
     args = parse_args(argv)

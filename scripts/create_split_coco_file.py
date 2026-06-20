@@ -1,3 +1,5 @@
+#%% Header
+
 """
 create_split_coco_file.py
 
@@ -13,12 +15,17 @@ Usage:
   python scripts/create_split_coco_file.py labels.json split.csv val_gt.json --split val
 """
 
+
+#%% Imports
+
 import argparse
 import csv
 import json
 import os
 import sys
 
+
+#%% Support functions
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
@@ -30,7 +37,10 @@ def fail(message):
 
 
 def load_split_locations(splits_csv, split_name):
-    """Return (locations_in_split, all_locations) from a splits.csv (location,split)."""
+    """
+    Return (locations_in_split, all_locations) from a splits.csv (location,split).
+    """
+
     in_split = set()
     all_locations = set()
     all_split_names = set()
@@ -54,11 +64,21 @@ def load_split_locations(splits_csv, split_name):
     return in_split, all_locations
 
 
-def main(argv=None):
-    args = parse_args(argv)
-    in_split, all_split_locations = load_split_locations(args.splits_csv, args.split)
+#%% Main function
 
-    with open(args.input_coco, encoding="utf-8") as f:
+def create_split_coco_file(input_coco,
+                           splits_csv,
+                           output_json,
+                           split='val'):
+    """
+    Given a COCO Camera Traps file and a splits.csv (location,split) produced during
+    training, write a new COCO file containing only the images, and their
+    annotations, whose location belongs to a chosen split (typically "val").
+    """
+
+    in_split, all_split_locations = load_split_locations(splits_csv, split)
+
+    with open(input_coco, encoding="utf-8") as f:
         coco = json.load(f)
     images = coco.get("images", [])
 
@@ -68,7 +88,7 @@ def main(argv=None):
     if missing_location:
         examples = ", ".join(str(x) for x in missing_location[:5])
         fail("%d image(s) in '%s' have no 'location' field (e.g. %s); this script "
-             "requires a location on every image." % (len(missing_location), args.input_coco, examples))
+             "requires a location on every image." % (len(missing_location), input_coco, examples))
 
     def loc_key(im):
         return str(im["location"]).strip()
@@ -84,20 +104,22 @@ def main(argv=None):
     out["images"] = kept_images
     out["annotations"] = kept_anns
 
-    out_dir = os.path.dirname(os.path.abspath(args.output_json))
+    out_dir = os.path.dirname(os.path.abspath(output_json))
     if out_dir and not os.path.isdir(out_dir):
         os.makedirs(out_dir, exist_ok=True)
-    with open(args.output_json, "w", encoding="utf-8") as f:
+    with open(output_json, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1)
 
-    eprint("Split '%s': %d locations." % (args.split, len(in_split)))
+    eprint("Split '%s': %d locations." % (split, len(in_split)))
     eprint("Kept %d of %d images and %d of %d annotations -> %s"
            % (len(kept_images), len(images), len(kept_anns),
-              len(coco.get("annotations", [])), args.output_json))
+              len(coco.get("annotations", [])), output_json))
     if not_in_any_split:
         eprint("Note: %d image(s) have a location that is not in the splits file at all "
                "(neither train nor val); they were excluded." % not_in_any_split)
 
+
+#%% Command-line driver
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__,
@@ -108,6 +130,13 @@ def parse_args(argv=None):
     p.add_argument("--split", default="val", help="split name to extract (default: val)")
     return p.parse_args(argv)
 
+
+def main(argv=None):
+    args = parse_args(argv)
+    create_split_coco_file(input_coco=args.input_coco,
+                           splits_csv=args.splits_csv,
+                           output_json=args.output_json,
+                           split=args.split)
 
 if __name__ == "__main__":
     main()
