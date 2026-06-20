@@ -1,3 +1,5 @@
+#%% Header
+
 """
 dataset.py
 
@@ -6,6 +8,8 @@ image, crops to the MegaDetector box (matching SpeciesNet's always_crop
 behavior), resizes to the model's input size, and normalizes. Cropping on the
 fly avoids duplicating tens of gigabytes of cropped images on disk.
 """
+
+#%% Imports and constants
 
 import os
 
@@ -16,12 +20,16 @@ from PIL import Image
 from model import IMG_SIZE, NORM_MEAN, NORM_STD
 
 
+#%% Support functions
+
 def crop_resize(im, bbox, img_size=IMG_SIZE):
-    """Crop a PIL image to a normalized MegaDetector bbox [x, y, w, h] and resize.
+    """
+    Crop a PIL image to a normalized MegaDetector bbox [x, y, w, h] and resize.
 
     Falls back to the whole image if the box is degenerate. Used by both training
     and inference so the preprocessing is identical.
     """
+
     width, height = im.size
     x, y, w, h = bbox
     left = max(0, int(round(x * width)))
@@ -33,7 +41,10 @@ def crop_resize(im, bbox, img_size=IMG_SIZE):
 
 
 def build_transforms(img_size=IMG_SIZE, train=True, mean=NORM_MEAN, std=NORM_STD):
-    """Transforms applied to the already-cropped, already-resized PIL image."""
+    """
+    Transforms applied to the already-cropped, already-resized PIL image.
+    """
+
     if train:
         return T.Compose([
             T.RandomHorizontalFlip(),
@@ -45,7 +56,9 @@ def build_transforms(img_size=IMG_SIZE, train=True, mean=NORM_MEAN, std=NORM_STD
 
 
 class CropDataset(torch.utils.data.Dataset):
-    """Dataset of MegaDetector crops, labeled by their image's category."""
+    """
+    Dataset of MegaDetector crops, labeled by their image's category.
+    """
 
     def __init__(self, instances, class_to_idx, image_root, img_size=IMG_SIZE,
                  train=True, mean=NORM_MEAN, std=NORM_STD):
@@ -70,6 +83,6 @@ class CropDataset(torch.utils.data.Dataset):
                 crop = crop_resize(im, inst.bbox, self.img_size)
                 tensor = self.transform(crop)
         except Exception:
-            # Corrupt or unreadable image: return a black crop so training continues.
+            # Corrupt or unreadable image: return a black crop so training continues
             tensor = torch.zeros(3, self.img_size, self.img_size)
         return tensor, label

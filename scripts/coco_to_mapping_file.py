@@ -1,3 +1,5 @@
+#%% Header
+
 """
 coco_to_mapping_file.py
 
@@ -25,6 +27,8 @@ often worth merging into a coarser class or dropping entirely.
 Run with --help for usage.
 """
 
+#%% Imports and constants
+
 import argparse
 import csv
 import json
@@ -32,34 +36,55 @@ import os
 import sys
 from collections import defaultdict
 
-
 # The category name used for images that have no annotations. A row for this
 # category is always present in the output.
 UNLABELED_CATEGORY = "unlabeled"
 
 
+#%% Support functions
+
 def eprint(*args, **kwargs):
-    """Print to stderr (used for warnings and the final summary)."""
+    """
+    Print to stderr (used for warnings and the final summary).
+    """
+
     print(*args, file=sys.stderr, **kwargs)
 
 
 def fail(message):
-    """Print an error and exit non-zero, without writing any output."""
+    """
+    Print an error and exit non-zero, without writing any output.
+    """
+
     eprint("ERROR: " + message)
     sys.exit(1)
 
 
 def build_mapping_rows(coco):
-    """Return a list of (input, output, count) rows, sorted by count descending.
+    """
+    Return a list of (input, output, count) rows, sorted by count descending.
 
     There is one row per distinct category name, plus an UNLABELED_CATEGORY row
     for images with no annotations (always present).
+
+    Args:
+        coco (dict): a parsed COCO Camera Traps object, with "images",
+            "annotations", and "categories" lists
+
+    Returns:
+        list: a list of (input, output, count) tuples, one per output row, sorted
+        by count descending (ties broken alphabetically). input (str) is a category
+        name; output (str) is always the empty string (the blank column for you to
+        fill in); count (int) is the number of distinct images containing that
+        category. There is one tuple per distinct category, plus an
+        UNLABELED_CATEGORY tuple.
     """
+
     cat_id_to_name = {}
     for c in coco.get("categories", []):
         cat_id_to_name[c["id"]] = c["name"]
 
-    # Number of distinct images that contain each category.
+    # Number of distinct images that contain each category
     images_per_category = defaultdict(set)
     annotated_image_ids = set()
     for ann in coco.get("annotations", []):
@@ -77,7 +102,7 @@ def build_mapping_rows(coco):
     for name, image_ids in images_per_category.items():
         counts[name] = len(image_ids)
 
-    # Images with no annotations at all become the "unlabeled" category.
+    # Images with no annotations at all become the "unlabeled" category
     all_image_ids = {im["id"] for im in coco.get("images", [])}
     n_unlabeled = len(all_image_ids - annotated_image_ids)
 
@@ -92,9 +117,11 @@ def build_mapping_rows(coco):
     else:
         counts[UNLABELED_CATEGORY] = n_unlabeled
 
-    # Sort by count descending, breaking ties alphabetically.
+    # Sort by count descending, breaking ties alphabetically
     rows = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return [(name, "", count) for name, count in rows]
+
+# ...def build_mapping_rows(...)
 
 
 def write_mapping_file(rows, output_csv):
@@ -105,6 +132,18 @@ def write_mapping_file(rows, output_csv):
         writer = csv.writer(f)
         writer.writerow(["input", "output", "count"])
         writer.writerows(rows)
+
+
+#%% Command-line driver
+
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("input_json", help="path to a COCO Camera Traps .json file")
+    p.add_argument("output_csv", help="path to the mapping CSV to create")
+    return p.parse_args(argv)
 
 
 def main(argv=None):
@@ -119,17 +158,6 @@ def main(argv=None):
     eprint("Wrote mapping template: {}".format(args.output_csv))
     eprint("  {} category row(s) (including '{}').".format(len(rows), UNLABELED_CATEGORY))
     eprint("  Fill in the 'output' column, then use it in the training-prep steps.")
-
-
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p.add_argument("input_json", help="path to a COCO Camera Traps .json file")
-    p.add_argument("output_csv", help="path to the mapping CSV to create")
-    return p.parse_args(argv)
-
 
 if __name__ == "__main__":
     main()

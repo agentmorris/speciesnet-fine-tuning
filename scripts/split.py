@@ -1,3 +1,5 @@
+#%% Header
+
 """
 split.py
 
@@ -18,16 +20,22 @@ Splits are measured in instances (boxes), not images, because one image can
 contribute several instances.
 """
 
+#%% Imports and constants
+
 import random
 from collections import Counter, defaultdict
 
 
+#%% Imports and constants
+
 def make_split(instances, val_fraction=0.15, seed=0):
     """Return (split, report).
 
-    split maps location -> "train" | "val". report describes the achieved
-    balance (per-camera and per-category).
+    split maps location -> "train" | "val".
+
+    report describes the achieved balance (per-camera and per-category).
     """
+
     loc_counts = defaultdict(Counter)   # location -> {category: n}
     loc_total = Counter()               # location -> n instances
     total = Counter()                   # category -> n instances
@@ -119,3 +127,5 @@ def make_split(instances, val_fraction=0.15, seed=0):
         "classes_missing_val": classes_missing_val,
     }
     return split, report
+
+# ...def make_split(...)

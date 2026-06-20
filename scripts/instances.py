@@ -1,3 +1,5 @@
+#%% Header
+
 """
 instances.py
 
@@ -22,6 +24,8 @@ MD file, and MD/disk mismatches become warnings (recorded in the report). The
 only hard error is if no instances survive at all.
 """
 
+#%% Imports and constants
+
 import csv
 import json
 import os
@@ -30,6 +34,10 @@ from dataclasses import dataclass
 
 from mapping import load_mapping, apply_mapping, mapping_warnings
 
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
+
+
+#%% Data classes
 
 @dataclass
 class Instance:
@@ -40,11 +48,13 @@ class Instance:
     location: str          # camera / deployment
 
 
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tif", ".tiff", ".webp"}
-
+#%% Support functions
 
 def load_csv_rows(csv_path):
-    """Read the data CSV (columns filename, category, location)."""
+    """
+    Read the data CSV (columns filename, category, location).
+    """
+
     rows = []
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
@@ -64,13 +74,15 @@ def load_csv_rows(csv_path):
 
 
 def load_md_animal_boxes(md_path, conf_threshold, max_boxes):
-    """Read a MegaDetector results file and select animal boxes per image.
+    """
+    Read a MegaDetector results file and select animal boxes per image.
 
     Returns (selected, md_files, stats) where selected maps file -> list of
     (bbox, conf) for the kept animal boxes. Per-detection classifications in the
     MD file (if any) are ignored. Raises ValueError if there is no detection
     category named 'animal'.
     """
+
     with open(md_path, encoding="utf-8") as f:
         md = json.load(f)
     det_cats = md.get("detection_categories")
@@ -87,7 +99,9 @@ def load_md_animal_boxes(md_path, conf_threshold, max_boxes):
     md_files = set()
     n_animal_dets = 0
     n_selected = 0
+
     for im in md.get("images", []):
+
         fname = im["file"]
         md_files.add(fname)
         animal = [d for d in (im.get("detections") or []) if d.get("category") == animal_id]
@@ -98,13 +112,18 @@ def load_md_animal_boxes(md_path, conf_threshold, max_boxes):
         selected[fname] = [(tuple(d["bbox"]), float(d.get("conf") or 0.0)) for d in kept]
         n_selected += len(kept)
 
+    # ...for each image
+
     stats = {
         "md_n_images": len(md_files),
         "md_n_animal_dets": n_animal_dets,
         "md_n_selected": n_selected,
         "animal_category_id": animal_id,
     }
+
     return selected, md_files, stats
+
+# ...def load_md_animal_boxes(...)
 
 
 def _resolve(filename, image_folder):
@@ -112,7 +131,10 @@ def _resolve(filename, image_folder):
 
 
 def md_vs_disk(md_files, image_folder, scan_disk=True, example_cap=10):
-    """Compare the MD file's images against what's on disk (informational)."""
+    """
+    Compare the MD file's images against what's on disk (informational).
+    """
+
     md_not_on_disk = [f for f in md_files if not os.path.isfile(_resolve(f, image_folder))]
     disk_not_in_md = []
     n_disk = 0
@@ -134,9 +156,18 @@ def md_vs_disk(md_files, image_folder, scan_disk=True, example_cap=10):
     }
 
 
-def prepare(csv_path, md_path, image_folder, mapping_path=None,
-            conf_threshold=0.3, max_boxes=5, min_instances=100, scan_disk=True):
-    """Build the training instance list. Returns (instances, classes, report)."""
+def prepare(csv_path,
+            md_path,
+            image_folder,
+            mapping_path=None,
+            conf_threshold=0.3,
+            max_boxes=5,
+            min_instances=100,
+            scan_disk=True):
+    """
+    Build the training instance list. Returns (instances, classes, report).
+    """
+
     warnings = []
 
     mapping = load_mapping(mapping_path) if mapping_path else {}
@@ -153,6 +184,7 @@ def prepare(csv_path, md_path, image_folder, mapping_path=None,
     n_csv_no_boxes = 0
 
     for r in rows:
+
         fname = r["filename"]
         cat = apply_mapping(r["category"], mapping)
         if cat is None:
@@ -170,6 +202,8 @@ def prepare(csv_path, md_path, image_folder, mapping_path=None,
             continue
         for bbox, conf in boxes:
             instances.append(Instance(fname, bbox, conf, cat, r["location"]))
+
+    # ...for each row
 
     counts_before = Counter(i.category for i in instances)
     dropped_by_mincount = sorted(
@@ -206,4 +240,7 @@ def prepare(csv_path, md_path, image_folder, mapping_path=None,
             "No training instances survived preparation. Check the MD confidence "
             "threshold, --min-instances, the category mapping, and that the CSV "
             "filenames match the MD 'file' fields.")
+
     return instances, classes, report
+
+# ...def prepare(...)

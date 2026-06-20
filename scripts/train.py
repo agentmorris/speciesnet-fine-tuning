@@ -40,7 +40,7 @@ import timm
 from torchmetrics.classification import MulticlassAccuracy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from instances import prepare                       # noqa: E402
+from instances import prepare, load_csv_rows        # noqa: E402
 from split import make_split                        # noqa: E402
 from dataset import CropDataset                     # noqa: E402
 from model import (build_model, freeze_backbone,    # noqa: E402
@@ -68,10 +68,11 @@ def is_ddp_child():
     return "LOCAL_RANK" in os.environ
 
 
-# --------------------------------------------------------------------------- #
-# Lightning module
-# --------------------------------------------------------------------------- #
 class LitClassifier(L.LightningModule):
+    """
+    Lightning module
+    """
+
     def __init__(self, num_classes, classes, timm_model, unfreeze_blocks, lr,
                  weight_decay, epochs, class_weights=None, backbone_checkpoint=None):
         super().__init__()
@@ -137,6 +138,7 @@ def read_best(run_folder, best_path, trainer):
     metrics are looked up in metrics.csv. Falls back to the final-epoch metrics
     if the lookup fails.
     """
+
     best_epoch = None
     if best_path:
         m = re.search(r"epoch0*([0-9]+)", os.path.basename(best_path))
@@ -275,42 +277,29 @@ def write_split(run_folder, split):
             w.writerow([loc, split[loc]])
 
 
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--resume", metavar="RUN_FOLDER",
-                   help="resume a previous run from its folder (ignores other data/model args)")
-    p.add_argument("--data-csv", help="data CSV with columns filename, category, location")
-    p.add_argument("--image-root", help="folder the image filenames are relative to")
-    p.add_argument("--md-results", help="MegaDetector results .json file")
-    p.add_argument("--run-folder", help="output folder for this run (must not already exist)")
-    p.add_argument("--mapping", help="optional category mapping CSV (input,output)")
-    p.add_argument("--val-fraction", type=float, default=0.15)
-    p.add_argument("--min-instances", type=int, default=100)
-    p.add_argument("--conf-threshold", type=float, default=0.3)
-    p.add_argument("--max-boxes", type=int, default=5)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--epochs", type=int, default=20)
-    p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--workers", type=int, default=8)
-    p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--weight-decay", type=float, default=1e-4)
-    p.add_argument("--unfreeze-blocks", type=int, default=2,
-                   help="0=head only, N=last N backbone stages, -1=all")
-    p.add_argument("--timm-model", default=DEFAULT_TIMM_MODEL)
-    p.add_argument("--backbone-checkpoint", default=SPECIESNET_TIMM_URL,
-                   help="converted SpeciesNet timm checkpoint (URL or local path) to start "
-                   "from; defaults to the released checkpoint. Pass 'imagenet' to start from "
-                   "ImageNet weights instead (only for checking that a setup runs).")
-    p.add_argument("--weighted-loss", action="store_true",
-                   help="weight the loss by inverse class frequency")
-    p.add_argument("--checkpoint-every-n-epochs", type=int, default=1)
-    p.add_argument("--patience", type=int, default=0,
-                   help="early-stopping patience on val_macro_acc (0 = disabled)")
-    p.add_argument("--devices", default="auto", help="'auto' (all GPUs) or an integer count")
-    p.add_argument("--limit-batches", type=int, default=0,
-                   help="debug: cap train/val batches per epoch (0 = no cap)")
-    return p.parse_args(argv)
+def write_image_splits(run_folder, data_csv, train_inst, val_inst):
+    """
+    Write a per-image record of which images went into which split, to
+    image_splits.json: a mapping from image file name to "train", "val", or
+    "excluded". "excluded" covers images that were in the data CSV but produced
+    no training instance (e.g. no animal box above threshold, or a class that
+    fell below the minimum-instance count). Images dropped before training (for
+    example multi-label images omitted by coco_to_csv.py) are not in the data CSV
+    and therefore do not appear here at all.
+    """
+
+    train_files = {i.filename for i in train_inst}
+    val_files = {i.filename for i in val_inst}
+    all_files = {r["filename"] for r in load_csv_rows(data_csv)}
+    image_splits = {}
+    for f in sorted(train_files):
+        image_splits[f] = "train"
+    for f in sorted(val_files):
+        image_splits[f] = "val"
+    for f in sorted(all_files - train_files - val_files):
+        image_splits[f] = "excluded"
+    with open(os.path.join(run_folder, "image_splits.json"), "w", encoding="utf-8") as f:
+        json.dump(image_splits, f, indent=1)
 
 
 def resolve_config(args):
@@ -332,11 +321,11 @@ def resolve_config(args):
 
 #%% Core training function
 
+def run_training(args):
+    """
+    Run a full training (or resume) given parsed command-line args.
+    """
 
-#%% Command-line driver
-
-def main(argv=None):
-    args = parse_args(argv)
     config, run_folder, resuming = resolve_config(args)
     L.seed_everything(config["seed"], workers=True)
 
@@ -389,6 +378,7 @@ def main(argv=None):
     # exists even if training fails).
     if not is_ddp_child():
         write_split(run_folder, split)
+        write_image_splits(run_folder, config["data_csv"], train_inst, val_inst)
         write_summary(run_folder, config, prep_report, split_report, classes, model_info)
 
     # Devices / strategy (gloo on native Windows, NCCL elsewhere).
@@ -453,6 +443,51 @@ def main(argv=None):
         print("Done. Best checkpoint: %s" % best)
         print("Inference model: %s" % inf_path)
         print("Summary: %s" % os.path.join(run_folder, "summary.md"))
+
+
+#%% Command-line driver
+
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--resume", metavar="RUN_FOLDER",
+                   help="resume a previous run from its folder (ignores other data/model args)")
+    p.add_argument("--data-csv", help="data CSV with columns filename, category, location")
+    p.add_argument("--image-root", help="folder the image filenames are relative to")
+    p.add_argument("--md-results", help="MegaDetector results .json file")
+    p.add_argument("--run-folder", help="output folder for this run (must not already exist)")
+    p.add_argument("--mapping", help="optional category mapping CSV (input,output)")
+    p.add_argument("--val-fraction", type=float, default=0.15)
+    p.add_argument("--min-instances", type=int, default=100)
+    p.add_argument("--conf-threshold", type=float, default=0.3)
+    p.add_argument("--max-boxes", type=int, default=5)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--lr", type=float, default=1e-4)
+    p.add_argument("--weight-decay", type=float, default=1e-4)
+    p.add_argument("--unfreeze-blocks", type=int, default=2,
+                   help="0=head only, N=last N backbone stages, -1=all")
+    p.add_argument("--timm-model", default=DEFAULT_TIMM_MODEL)
+    p.add_argument("--backbone-checkpoint", default=SPECIESNET_TIMM_URL,
+                   help="converted SpeciesNet timm checkpoint (URL or local path) to start "
+                   "from; defaults to the released checkpoint. Pass 'imagenet' to start from "
+                   "ImageNet weights instead (only for checking that a setup runs).")
+    p.add_argument("--weighted-loss", action="store_true",
+                   help="weight the loss by inverse class frequency")
+    p.add_argument("--checkpoint-every-n-epochs", type=int, default=1)
+    p.add_argument("--patience", type=int, default=0,
+                   help="early-stopping patience on val_macro_acc (0 = disabled)")
+    p.add_argument("--devices", default="auto", help="'auto' (all GPUs) or an integer count")
+    p.add_argument("--limit-batches", type=int, default=0,
+                   help="debug: cap train/val batches per epoch (0 = no cap)")
+    return p.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    run_training(args)
 
 
 if __name__ == "__main__":

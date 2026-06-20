@@ -313,6 +313,7 @@ Everything for one run lives in its run folder:
 * **`metrics.csv`**: per-epoch training and validation metrics.
 * **`config.json`**: the full configuration, which is what makes resuming possible.
 * **`split.csv`**: which camera (location) was assigned to the training set and which to validation.
+* **`image_splits.json`**: a per-image record of which images went into each split, mapping every data-CSV image to `train`, `val`, or `excluded`.  `excluded` covers images that were in your data but produced no training crop (for example, no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is what `create_split_coco_file.py` and `create_split_results_file.py` read to reconstruct the exact image set of a split (see "Creating a val-only data file").
 * **`hparams.yaml`**: the model's hyperparameters, as recorded by the training engine (PyTorch Lightning).
 
 ### Resuming an interrupted run
