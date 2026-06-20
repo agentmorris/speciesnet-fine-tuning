@@ -77,6 +77,118 @@ def is_ddp_child():
     return "LOCAL_RANK" in os.environ
 
 
+class TrainingOptions:
+    """
+    All options for a fine-tuning run.
+
+    These mirror the command-line arguments (see parse_args()); main() copies a
+    parsed argparse namespace onto an instance of this class with args_to_object(),
+    so the defaults below are the single source of truth for default values. Only
+    the CONFIG_KEYS fields are written to config.json and must match on a resume;
+    the rest (resume, run_folder, devices, limit_batches) are per-invocation.
+    """
+
+    def __init__(self):
+
+        #: path to a previous run folder to resume; if set, the data/model options
+        #: are loaded from its config.json and the other options are ignored
+        self.resume = None
+
+        #: path to the data CSV (columns filename, category, location)
+        self.data_csv = None
+
+        #: folder the data CSV's filenames are relative to
+        self.image_root = None
+
+        #: MegaDetector results .json file for the images
+        self.md_results = None
+
+        #: output folder for this run; must not already exist on a fresh run
+        self.run_folder = None
+
+        #: optional category mapping CSV (input,output); None means no remapping
+        self.mapping = None
+
+        #: target fraction of instances (overall and per category) for validation
+        self.val_fraction = 0.15
+
+        #: drop categories with fewer than this many instances, after mapping
+        self.min_instances = 100
+
+        #: minimum MegaDetector confidence for an animal box to become an instance
+        self.conf_threshold = 0.3
+
+        #: maximum animal boxes to use per image, highest confidence first
+        self.max_boxes = 5
+
+        #: random seed (also determines the train/val split)
+        self.seed = 0
+
+        #: number of training epochs
+        self.epochs = 20
+
+        #: batch size per GPU
+        self.batch_size = 32
+
+        #: data-loading worker processes per GPU
+        self.workers = 8
+
+        #: optimizer learning rate
+        self.lr = 1e-4
+
+        #: optimizer weight decay
+        self.weight_decay = 1e-4
+
+        #: how much of the backbone to train: 0 = head only, N = last N stages,
+        #: -1 = the whole network
+        self.unfreeze_blocks = 2
+
+        #: timm model name for the backbone
+        self.timm_model = DEFAULT_TIMM_MODEL
+
+        #: converted SpeciesNet weights (URL or local path) to start from, or
+        #: "imagenet" to start from timm's ImageNet weights
+        self.backbone_checkpoint = SPECIESNET_TIMM_URL
+
+        #: weight the loss by inverse class frequency
+        self.weighted_loss = False
+
+        #: how often (in epochs) to save a checkpoint
+        self.checkpoint_every_n_epochs = 1
+
+        #: early-stopping patience on val_macro_acc (0 disables early stopping)
+        self.patience = 0
+
+        #: GPUs to use: "auto" (all available) or an integer count
+        self.devices = "auto"
+
+        #: debug only: cap train/val batches per epoch (0 = no cap)
+        self.limit_batches = 0
+
+    # ...def __init__(...)
+
+# ...class TrainingOptions
+
+
+def args_to_object(args, obj):
+    """
+    Copy all non-underscore fields from a namespace (e.g. from parse_args()) onto
+    an object, overwriting its attributes in place.
+
+    Args:
+        args (argparse.Namespace): the namespace to copy fields from
+        obj (object): the object whose attributes are updated
+
+    Returns:
+        object: [obj], modified in place and also returned
+    """
+
+    for name, value in vars(args).items():
+        if not name.startswith("_"):
+            setattr(obj, name, value)
+    return obj
+
+
 class LitClassifier(L.LightningModule):
     """
     Lightning module
@@ -356,23 +468,24 @@ def write_image_splits(run_folder, data_csv, train_inst, val_inst):
         json.dump(image_splits, f, indent=1)
 
 
-def resolve_config(args):
+def resolve_config(options):
     """
     Determine the run configuration, distinguishing a fresh run from a resume.
 
-    On a resume (args.resume is set), the configuration is loaded from config.json
-    in the existing run folder, so the run continues with identical data and model
-    settings and the other command-line arguments are ignored. On a fresh run, the
-    four required arguments (data_csv, image_root, md_results, run_folder) are
-    checked, and the config is built from the [CONFIG_KEYS] attributes of [args]
-    (so their defaults apply). Only the CONFIG_KEYS settings are captured here;
-    runtime-only flags such as --devices and --limit-batches are read from [args]
-    elsewhere, so they may differ across a resume. This function only reads or
-    assembles the config; the matching config.json is written later, by
-    run_training(), and only on a fresh run.
+    On a resume (options.resume is set), the configuration is loaded from
+    config.json in the existing run folder, so the run continues with identical
+    data and model settings and the other options are ignored. On a fresh run, the
+    four required options (data_csv, image_root, md_results, run_folder) are
+    checked, and the config is built from the [CONFIG_KEYS] attributes of
+    [options]. Only the CONFIG_KEYS settings are captured here; runtime-only
+    options such as devices and limit_batches are read from [options] elsewhere, so
+    they may differ across a resume. This function only reads or assembles the
+    config; the matching config.json is written later, by run_training(), and only
+    on a fresh run.
 
     Args:
-        args (argparse.Namespace): parsed command-line arguments (see parse_args())
+        options (TrainingOptions): the run options (typically built from
+            parse_args() via args_to_object())
 
     Returns:
         tuple: a 3-tuple (config, run_folder, resuming). config (dict) holds the
@@ -380,32 +493,36 @@ def resolve_config(args):
         (bool) is True when continuing an existing run
 
     Raises:
-        SystemExit: on a fresh run, if any of --data-csv, --image-root,
-            --md-results, or --run-folder is missing
+        SystemExit: on a fresh run, if any of data_csv, image_root, md_results, or
+            run_folder is missing
     """
 
-    if args.resume:
-        run_folder = args.resume
+    if options.resume:
+        run_folder = options.resume
         with open(os.path.join(run_folder, "config.json"), encoding="utf-8") as f:
             config = json.load(f)
         return config, run_folder, True
     for req in ("data_csv", "image_root", "md_results", "run_folder"):
-        if getattr(args, req) is None:
+        if getattr(options, req) is None:
             raise SystemExit("ERROR: --%s is required for a fresh run" % req.replace("_", "-"))
-    config = {k: getattr(args, k) for k in CONFIG_KEYS}
-    return config, args.run_folder, False
+    config = {k: getattr(options, k) for k in CONFIG_KEYS}
+    return config, options.run_folder, False
 
 
 #%% Core training function
 
-def run_training(args):
+def run_training(options):
     """
-    Run a full training (or resume) given parsed command-line args.
+    Run a full training (or resume) given a TrainingOptions.
+
+    Args:
+        options (TrainingOptions): the run options (typically built from
+            parse_args() via args_to_object())
     """
 
     # Resolve the run config (from CLI for a fresh run, or from the run folder
     # when resuming) and seed all RNGs for reproducibility
-    config, run_folder, resuming = resolve_config(args)
+    config, run_folder, resuming = resolve_config(options)
     L.seed_everything(config["seed"], workers=True)
 
     # Fresh-run folder management happens only in the launcher process
@@ -465,10 +582,10 @@ def run_training(args):
 
     # Devices / strategy (gloo on native Windows, NCCL elsewhere)
     n_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-    if args.devices == "auto":
+    if options.devices == "auto":
         devices, n_proc = ("auto", max(1, n_gpus))
     else:
-        devices = int(args.devices)
+        devices = int(options.devices)
         n_proc = devices
     accelerator = "gpu" if n_gpus > 0 else "cpu"
     if accelerator == "gpu" and n_proc > 1:
@@ -502,7 +619,7 @@ def run_training(args):
 
     # Set up the CSV metrics logger (writes metrics.csv) and the Lightning trainer
     logger = CSVLogger(save_dir=run_folder, name="", version="")
-    limit = args.limit_batches or 1.0
+    limit = options.limit_batches or 1.0
     trainer = L.Trainer(
         max_epochs=config["epochs"], accelerator=accelerator, devices=devices,
         strategy=strategy, precision=precision, default_root_dir=run_folder,
@@ -537,6 +654,8 @@ def run_training(args):
 #%% Command-line driver
 
 def parse_args(argv=None):
+    # Pull defaults from TrainingOptions so they are defined in exactly one place.
+    d = TrainingOptions()
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--resume", metavar="RUN_FOLDER",
@@ -546,37 +665,38 @@ def parse_args(argv=None):
     p.add_argument("--md-results", help="MegaDetector results .json file")
     p.add_argument("--run-folder", help="output folder for this run (must not already exist)")
     p.add_argument("--mapping", help="optional category mapping CSV (input,output)")
-    p.add_argument("--val-fraction", type=float, default=0.15)
-    p.add_argument("--min-instances", type=int, default=100)
-    p.add_argument("--conf-threshold", type=float, default=0.3)
-    p.add_argument("--max-boxes", type=int, default=5)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--epochs", type=int, default=20)
-    p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--workers", type=int, default=8)
-    p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--weight-decay", type=float, default=1e-4)
-    p.add_argument("--unfreeze-blocks", type=int, default=2,
+    p.add_argument("--val-fraction", type=float, default=d.val_fraction)
+    p.add_argument("--min-instances", type=int, default=d.min_instances)
+    p.add_argument("--conf-threshold", type=float, default=d.conf_threshold)
+    p.add_argument("--max-boxes", type=int, default=d.max_boxes)
+    p.add_argument("--seed", type=int, default=d.seed)
+    p.add_argument("--epochs", type=int, default=d.epochs)
+    p.add_argument("--batch-size", type=int, default=d.batch_size)
+    p.add_argument("--workers", type=int, default=d.workers)
+    p.add_argument("--lr", type=float, default=d.lr)
+    p.add_argument("--weight-decay", type=float, default=d.weight_decay)
+    p.add_argument("--unfreeze-blocks", type=int, default=d.unfreeze_blocks,
                    help="0=head only, N=last N backbone stages, -1=all")
-    p.add_argument("--timm-model", default=DEFAULT_TIMM_MODEL)
-    p.add_argument("--backbone-checkpoint", default=SPECIESNET_TIMM_URL,
+    p.add_argument("--timm-model", default=d.timm_model)
+    p.add_argument("--backbone-checkpoint", default=d.backbone_checkpoint,
                    help="converted SpeciesNet timm checkpoint (URL or local path) to start "
                    "from; defaults to the released checkpoint. Pass 'imagenet' to start from "
                    "ImageNet weights instead (only for checking that a setup runs).")
     p.add_argument("--weighted-loss", action="store_true",
                    help="weight the loss by inverse class frequency")
-    p.add_argument("--checkpoint-every-n-epochs", type=int, default=1)
-    p.add_argument("--patience", type=int, default=0,
+    p.add_argument("--checkpoint-every-n-epochs", type=int, default=d.checkpoint_every_n_epochs)
+    p.add_argument("--patience", type=int, default=d.patience,
                    help="early-stopping patience on val_macro_acc (0 = disabled)")
-    p.add_argument("--devices", default="auto", help="'auto' (all GPUs) or an integer count")
-    p.add_argument("--limit-batches", type=int, default=0,
+    p.add_argument("--devices", default=d.devices, help="'auto' (all GPUs) or an integer count")
+    p.add_argument("--limit-batches", type=int, default=d.limit_batches,
                    help="debug: cap train/val batches per epoch (0 = no cap)")
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    run_training(args)
+    options = args_to_object(args, TrainingOptions())
+    run_training(options)
 
 
 if __name__ == "__main__":
