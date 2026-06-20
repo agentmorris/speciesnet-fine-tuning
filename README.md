@@ -1,5 +1,44 @@
 # SpeciesNet fine-tuning tutorial
 
+## Table of contents
+
+- [Overview](#overview)
+  - [Goals of this tutorial](#goals-of-this-tutorial)
+  - [Special thanks](#special-thanks)
+  - [Consider using AI to take it from here](#consider-using-ai-to-take-it-from-here)
+  - [What to expect from species classification, and when fine-tuning is/isn't worth it](#what-to-expect-from-species-classification-and-when-fine-tuning-isisnt-worth-it)
+  - [How much data do I need?](#how-much-data-do-i-need)
+- [Overview of the process](#overview-of-the-process)
+- [Setting up your environment](#setting-up-your-environment)
+- [Preparing your data](#preparing-your-data)
+  - [The format this tutorial expects](#the-format-this-tutorial-expects)
+  - [Why `location` matters](#why-location-matters)
+  - [How filenames are resolved](#how-filenames-are-resolved)
+  - [Creating your .csv file](#creating-your-csv-file)
+  - [If your data is already in COCO Camera Traps format](#if-your-data-is-already-in-coco-camera-traps-format)
+- [Running MegaDetector](#running-megadetector)
+- [Preparing a mapping file](#preparing-a-mapping-file)
+  - [Why you might remap your categories](#why-you-might-remap-your-categories)
+  - [The mapping CSV format](#the-mapping-csv-format)
+  - [Generating a template mapping file](#generating-a-template-mapping-file)
+- [Fine-tuning](#fine-tuning)
+  - [What you need](#what-you-need)
+  - [Starting a fine-tuning run](#starting-a-fine-tuning-run)
+  - [Fine-tuning options](#fine-tuning-options)
+  - [What a run produces](#what-a-run-produces)
+  - [Resuming an interrupted run](#resuming-an-interrupted-run)
+  - [Using both GPUs, and Windows versus WSL](#using-both-gpus-and-windows-versus-wsl)
+  - [Choosing how much to fine-tune](#choosing-how-much-to-fine-tune)
+- [Running your fine-tuned model](#running-your-fine-tuned-model)
+  - [Inference options](#inference-options)
+  - [The MegaDetector format output](#the-megadetector-format-output)
+  - [The CSV output](#the-csv-output)
+- [Evaluation](#evaluation)
+  - [Creating a val-only data file](#creating-a-val-only-data-file)
+- [Working with your results](#working-with-your-results)
+- [Future work](#future-work)
+- [Topics you probably aren't interested in](#topics-you-probably-arent-interested-in)
+
 ## Overview
 
 ### Goals of this tutorial
@@ -280,7 +319,7 @@ python scripts/train.py \
 
 `--run-folder` is required and must not already exist; everything from the run is written there.  The script prints a running summary, and when it finishes it writes the fine-tuned model to `runs/my-first-run/model_best.pt`.
 
-### Options
+### Fine-tuning options
 
 Run `python scripts/train.py --help` for the complete list; these are the ones most worth knowing.
 
@@ -361,7 +400,7 @@ python scripts/predict.py \
 
 By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see "Evaluation").  Pass `--csv-output` to instead write a simple per-box CSV (described below), which is handier if you only want to skim results in a spreadsheet.
 
-### Options
+### Inference options
 
 | Option | Default | What it does |
 |---|---|---|
