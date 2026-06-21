@@ -8,7 +8,7 @@
   - [Consider using AI to take it from here](#consider-using-ai-to-take-it-from-here)
   - [What to expect from species classification, and when fine-tuning is/isn't worth it](#what-to-expect-from-species-classification-and-when-fine-tuning-isisnt-worth-it)
   - [How much data do I need?](#how-much-data-do-i-need)
-- [Overview of the process](#overview-of-the-process)
+- [Steps in this tutorial](#steps-in-this-tutorial)
 - [Setting up your environment](#setting-up-your-environment)
 - [Preparing your data](#preparing-your-data)
   - [The format this tutorial expects](#the-format-this-tutorial-expects)
@@ -16,7 +16,7 @@
   - [How filenames are resolved](#how-filenames-are-resolved)
   - [Creating your .csv file](#creating-your-csv-file)
   - [If your data is already in COCO Camera Traps format](#if-your-data-is-already-in-coco-camera-traps-format)
-- [Running MegaDetector](#running-megadetector)
+- [Running MegaDetector on your images](#running-megadetector-on-your-images)
 - [Preparing a mapping file](#preparing-a-mapping-file)
   - [Why you might remap your categories](#why-you-might-remap-your-categories)
   - [The mapping CSV format](#the-mapping-csv-format)
@@ -27,12 +27,11 @@
   - [Fine-tuning options](#fine-tuning-options)
   - [What a run produces](#what-a-run-produces)
   - [Resuming an interrupted run](#resuming-an-interrupted-run)
-  - [Using both GPUs, and Windows versus WSL](#using-both-gpus-and-windows-versus-wsl)
   - [Choosing how much to fine-tune](#choosing-how-much-to-fine-tune)
 - [Running your fine-tuned model](#running-your-fine-tuned-model)
   - [Inference options](#inference-options)
-  - [The MegaDetector format output](#the-megadetector-format-output)
-  - [The CSV output](#the-csv-output)
+  - [The default output file (MegaDetector format)](#the-default-output-file-megadetector-format-output)
+  - [The csv output format](#the-csv-output-format)
 - [Evaluation](#evaluation)
   - [Creating a val-only data file](#creating-a-val-only-data-file)
 - [Working with your results](#working-with-your-results)
@@ -107,11 +106,11 @@ So, consider grouping together categories that are very small in terms of traini
 
 Because we will be training on animals that are cropped out of their original images with MegaDetector, if you have a group of four elephants in an image, that "counts" as four examples.
 
-## Overview of the process
+## Steps in this tutorial
 
 This is basically what's going to happen in the rest of this tutorial:
 
-1. Setting up your environment: cloning this reopsitory, installing Python, etc.
+1. Setting up your environment: cloning this repository, installing Python, etc.
 2. Getting your data into the format the tutorial code needs to figure out which images contain which species.
 3. Running [MegaDetector](https://github.com/agentmorris/MegaDetector) on your images.
 4. Creating your fine-tuned model.
@@ -121,7 +120,7 @@ This is basically what's going to happen in the rest of this tutorial:
 
 The instructions in this tutorial will assume two things:
 
-1. You have cloned this git repo to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.
+1. You have cloned this GitHub repository to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.
 
 2. You have a Python environment set up.  For folks new to Python, we recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
 
@@ -175,7 +174,7 @@ Two things to know about this format:
 
 ### Why `location` matters
 
-A camera-trap dataset of 1,000,000 images might come from only ~200 cameras, and the images from a single camera are highly repetitive (same background, same lighting, often the same individual animals passing repeatedly). If you let images from one camera land in both your training and validation sets, your validation accuracy will look great, but won't reflect how your model will perform in the real world.
+A camera trap dataset of 1,000,000 images might come from only ~200 cameras, and the images from a single camera are highly repetitive (same background, same lighting, often the same individual animals passing repeatedly). If you let images from one camera land in both your training and validation sets, your validation accuracy will look great, but won't reflect how your model will perform in the real world.
 
 So the right thing to do is to split the data by camera: every image from a given camera goes entirely into training *or* entirely into validation, never both.  Code that you will use later in this tutorial does that splitting for you, but to do it, it needs to know which images share a camera.  That is the only reason the `location` column exists.  You don't have to think about the splitting itself; you just have to provide the location for each image.
 
@@ -200,7 +199,7 @@ Everyone's data is in a different format, so we can't provide universal guidelin
 
 ### If your data is already in COCO Camera Traps format
 
-[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common JSON format for camera-trap labels. If your labels are in a CCT `.json` file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
+[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels. If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
 
 You can run the script like this:
 
@@ -218,28 +217,35 @@ The options:
 | `--absolute-paths` | off | Write absolute image paths instead of the paths as they appear in the JSON. Requires `--image-folder`. |
 | `--check-images` | off | Before writing, confirm every referenced image actually exists on disk. Requires `--image-folder`. |
 
-#### A note on `--multiple-label-handling` and rare classes
+The default value for `--multiple-label-handling` is `omit`, which throws away any image that contains more than one category.  This is because we have no way to determine which animal in the image goes with which category.
 
-The default, `omit`, throws away any image that contains more than one category.  This is because we have no way to determine which animal in the image goes with which category.
+## Running MegaDetector on your images
 
-## Running MegaDetector
+SpeciesNet relies on [MegaDetector](https://github.com/agentmorris/MegaDetector) to *find* animals, before SpeciesNet can classify them.  Fine-tuned versions of SpeciesNet work the same way.  Consequently, before you can create a fine-tuned model on your data, you need to run MegaDetector on your data.
 
-* TODO: talk about ways to run MD, AddaxAI, Python, etc.
+There are a number of ways to run MegaDetector, so it's not the best use of space in this already-long README file to tell you how to run MegaDetector.  All that this tutorial cares about is that you end up with a file in the [MegaDetector output format](http://lila.science/megadetector-output-format) that points to the same images your .csv file points to.  Typically that means running MegaDetector on the root folder where all your images are.
+
+The two most common ways to run MegaDetector are:
+
+* Using [AddaxAI](https://addaxdatascience.com/addaxai/), a free, graphical tool for running AI models on camera trap images
+* Following the instructions [here](https://github.com/agentmorris/MegaDetector/blob/main/megadetector.md#using-megadetector) to run MegaDetector at the command line (with the [MegaDetector Python package](https://megadetector.readthedocs.io/))
+
+Both approaches produce the right file format.
 
 ## Preparing a mapping file
 
-A mapping file is an optional .csv file that renames, merges, or drops some of your categories at training time.  It is kept separate from your data .csv on purpose: the data .csv is a literal record of your labels, while the mapping captures modeling decisions, so you can try different groupings without editing your data.
+A mapping file is an optional .csv file that renames, merges, or drops some of your categories at training time.  It is kept separate from your data .csv on purpose: the data .csv is a literal record of your labels, while the mapping captures decisions related to model training, so you can try different groupings without editing your data.
 
 ### Why you might remap your categories
 
 Common reasons:
 
 * **The same animal is labeled two ways.** For example `wildebeest` and `blue_wildebeest`, or a misspelling sitting alongside the correct spelling.  Map them to one name so they count as a single class.
-* **You have splits you do not want the model to make.** Sex or age labels like `lion`, `lion_male`, and `lion_female` are usually better merged into `lion`, unless you specifically need to tell them apart and have enough examples of each.
-* **Some classes are too rare or too hard to tell apart.** A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, etc.) usually gives a more useful model than dozens of classes the model can barely learn.
-* **Some labels are not real classes.** A vague catch-all like `animal`, or a junk label, can often be dropped entirely.
+* **Some of your labels capture nuances you don't want the model to learn** (or don't have enough data to learn).  Sex or age labels like `lion`, `lion_male`, `lion_female`, and `lion_cub` might be better merged into `lion`, unless you have enough examples of each to train separate categories (and they're relatively easy to distinguish).
+* **Some classes are too rare or too hard to tell apart.** A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, etc.) usually yields a more useful model.
+* **Some labels are not real classes.** A catch-all like `animal`, or a label like `unknown`, can often be dropped entirely.
 
-You aren't required to remap anything: if you skip the mapping file, every category (above the minimum count) is trained as its own class.
+You aren't required to remap anything: if you skip the mapping file, every category that appears in your .csv file (above a minimum count that you'll specify in the next step) is trained as its own class.
 
 ### The mapping CSV format
 
@@ -292,17 +298,17 @@ One caveat about `count`: it is the number of *images* per category, which is a 
 
 ## Fine-tuning
 
-Fine-tuning takes the SpeciesNet classifier and continues training it on your own labeled crops, so it learns the species in your ecosystem (and your label names) instead of SpeciesNet's full global taxonomy.  The training script does three things for you: it turns your data into training crops, it splits your cameras into training and validation sets, and it trains the model while recording everything in a single run folder.
+Fine-tuning takes the SpeciesNet classifier and continues training it on your own labeled crops, so it learns the species in your study area (and your label names) instead of SpeciesNet's full taxonomy.  The training script does three things for you: it turns your data into training crops, it splits your cameras into training and validation sets, and it trains the model.  All the output related to training gets put into a single folder that we'll call the "run folder".
 
-By default each labeled image becomes one crop per MegaDetector animal box (up to five boxes per image, at confidence 0.3 or higher; see `--max-boxes` and `--conf-threshold`), and each crop inherits its image's label.  This is the same "classify the animal box" approach SpeciesNet itself uses.  One consequence is worth understanding: an image with no animal box above the threshold produces no training crops, so most `blank` images contribute nothing.  A crop-based classifier only learns `blank` from MegaDetector's false-positive boxes, which is expected.  Finally, the classifier head is replaced with a fresh head over your classes, and part of the backbone is unfrozen so it can adapt (see "Choosing how much to fine-tune" below).
+By default, each labeled image becomes one training example per MegaDetector animal box (up to five boxes per image, at confidence 0.3 or higher; see `--max-boxes` and `--conf-threshold`), and each crop inherits its image's label.  This is the same "classify the animal box" approach SpeciesNet itself uses.  One consequence is worth understanding: an image with no animal box above the threshold produces no training crops, so most `blank` images contribute nothing.  A crop-based classifier only learns `blank` from MegaDetector's false-positive boxes, which is expected.
 
 ### What you need
 
-Before fine-tuning you should already have:
+Before fine-tuning you should have:
 
-* **A data CSV** with `filename`, `category`, and `location` columns (see "Preparing your data").
-* **A MegaDetector results file** covering those images (see "Running MegaDetector").
-* **Optionally, a mapping file** to rename, merge, or drop classes (see "Preparing a mapping file").
+* **A data CSV** with `filename`, `category`, and `location` columns (see "[preparing your data]((#preparing-your-data)").
+* **A MegaDetector results file** covering those images (see "[running MegaDetector on your images](running-megadetector-on-your-images)").
+* **Optionally, a mapping file** to rename, merge, or drop classes (see "[preparing a mapping file](preparing-a-mapping-file)").
 
 ### Starting a fine-tuning run
 
@@ -310,30 +316,39 @@ A minimal run looks like this:
 
 ```bash
 python scripts/train.py \
-    --data-csv data.csv \
-    --image-root /path/to/images \
-    --md-results md_results.json \
-    --mapping mapping.csv \
-    --run-folder runs/my-first-run
+    --data-csv c:/path/to/your/data.csv \
+    --image-root c:/path/to/your/images \
+    --md-results c:/path/to/your/megadetector_results.json \
+    --mapping c:/path/to/your/mapping_file.csv \
+    --run-folder c:/path/to/your/output/folder
 ```
 
-`--run-folder` is required and must not already exist; everything from the run is written there.  The script prints a running summary, and when it finishes it writes the fine-tuned model to `runs/my-first-run/model_best.pt`.
+`--run-folder` is required and must not already exist; everything from the run is written there.
+
+The script prints a running summary, and when it finishes it writes the fine-tuned model to `runs/my-first-run/model_best.pt`.
+
+The training script will download the SpeciesNet weights from this repository; if you've already downloaded them, you can use the `--backbone-checkpoint` option to point the training script to the file you want to start training from.
 
 ### Fine-tuning options
 
-Run `python scripts/train.py --help` for the complete list; these are the ones most worth knowing.
+Run `python scripts/train.py --help` for the complete list; these are the ones most worth knowing:
 
 | Option | Default | What it does |
 |---|---|---|
-| `--backbone-checkpoint` | (ImageNet) | The converted SpeciesNet weights to start from.  Strongly recommended. |
 | `--mapping` | (none) | Mapping CSV to rename, merge, or drop classes (see "Preparing a mapping file"). |
-| `--unfreeze-blocks` | `2` | How much of the backbone to train: `0` = the new head only, `N` = the head plus the last N of the backbone's 7 stages, `-1` = the whole network. |
 | `--min-instances` | `100` | Drop any class with fewer than this many training crops (counted after mapping). |
 | `--val-fraction` | `0.15` | Target fraction of crops to hold out for validation (chosen by camera). |
 | `--conf-threshold` | `0.3` | Minimum MegaDetector confidence for a box to become a training crop. |
 | `--max-boxes` | `5` | Maximum animal boxes to use per image (highest confidence first). |
-| `--weighted-loss` | off | Weight the loss by inverse class frequency, to help rare classes. |
 | `--epochs` | `20` | Number of passes over the training data. |
+| `--unfreeze-blocks` | `2` | How much of the backbone to train: `0` = the new head only, `N` = the head plus the last N of the backbone's 7 stages, `-1` = the whole network. |
+
+These are the ones you can *probably* leave at their defaults, but you might want to tinker with them if you've trained a model and you want to experiment with different parameters, or you have trouble getting training running:
+
+| Option | Default | What it does |
+|---|---|---|
+| `--mapping` | (none) | Mapping CSV to rename, merge, or drop classes (see "Preparing a mapping file"). |
+| `--weighted-loss` | off | Weight the loss by inverse class frequency, to help rare classes. |
 | `--batch-size` | `32` | Crops per step, per GPU. |
 | `--lr` | `1e-4` | Learning rate. |
 | `--workers` | `8` | Data-loading worker processes, per GPU. |
@@ -344,7 +359,7 @@ Run `python scripts/train.py --help` for the complete list; these are the ones m
 
 ### What a run produces
 
-Everything for one run lives in its run folder:
+Everything for one training run lives in its run folder:
 
 * **`summary.md`**: a human-readable report of the run, and the first thing to read.  It lists your final classes and how many crops each has, the train/val split balance (per camera and per class), every data warning (images missing from disk, images with no animal box, classes dropped below the minimum, and so on), and the final metrics.
 * **`model_best.pt`**: a compact, self-describing checkpoint of the best epoch, ready for "Running your fine-tuned model".  It records the class list and the exact preprocessing, so you never have to remember them.
@@ -360,63 +375,59 @@ Everything for one run lives in its run folder:
 If a run stops partway (a crash, a reboot, or you stopping it), continue it using only the folder name:
 
 ```bash
-python scripts/train.py --resume runs/my-first-run
+python scripts/train.py --resume c:/path/to/your/run/folder
 ```
 
 It reads `config.json`, finds the most recent checkpoint, and picks up where it left off, restoring the optimizer, the learning-rate schedule, and the epoch count.  You do not need to remember any of the other settings; they were saved for you.
 
-### Using both GPUs, and Windows versus WSL
-
-If your machine has more than one GPU, the script uses all of them by default (pass `--devices 1` to force a single GPU).  On a two-GPU machine each epoch is roughly twice as fast.
-
-This works on both native Windows and Linux/WSL.  In our testing the throughput was about the same on both (around 190 to 200 images per second per RTX 4090, reading images from a Windows drive in either case), so for this model you do not need to bother with WSL.  Unlike large transformer models, EfficientNetV2 does not benefit from the Linux-only acceleration features, so the usual reason to prefer WSL does not apply here.
-
 ### Choosing how much to fine-tune
 
-The most important knob is `--unfreeze-blocks`.  Freezing more of the backbone (a smaller number) trains fewer parameters: it is faster and less prone to overfitting on small datasets, but it adapts less.  Unfreezing more (a larger number, or `-1` for the whole network) can fit your data better, but it needs more data and overfits more easily.  The default of `2` is a reasonable middle ground that still leaves most of the network trainable.  If your dataset is small, or you watch validation accuracy peak early and then decline, try a smaller number; if your dataset is large and diverse, try a larger one.
+One of the important knobs is `--unfreeze-blocks`.  Freezing more of the backbone (a smaller number) trains fewer parameters: it is faster and less prone to overfitting on small datasets, but it adapts less.  Unfreezing more (a larger number, or `-1` for the whole network) can fit your data better, but it needs more data and overfits more easily.  The default of `2` is a reasonable middle ground that still leaves most of the network trainable.  If your dataset is small, or you watch validation accuracy peak early and then decline, try a smaller number; if your dataset is large and diverse, try a larger one.
 
 A few other practical notes:
 
 * **Watch the per-class counts in `summary.md`.** Classes below `--min-instances` are dropped, and the "omit multi-label images" default during data preparation can quietly shrink rare classes.  If a class you care about is missing or tiny, that report is where you will notice.
-* **For imbalanced data, try `--weighted-loss`.** Camera-trap datasets are very long-tailed, and weighting the loss pushes the model to pay more attention to rarer classes, at some cost to accuracy on the common ones.
+* **For imbalanced data, try `--weighted-loss`.** Camera trap datasets are very long-tailed, and weighting the loss pushes the model to pay more attention to rarer classes, at some cost to accuracy on the common ones.
 * **Your validation numbers are only as honest as your locations.** Because the split is by camera, validation accuracy reflects how well the model will do on cameras it has never seen.  If you put every image under one location, those numbers will be optimistic.
 * **Rare, visually similar classes are hard.** If two species are nearly indistinguishable in your images, consider merging them in the mapping file rather than expecting the model to separate them.
 
 ## Running your fine-tuned model
 
-Once you have a fine-tuned model (`model_best.pt` from your run folder), you run it on new images the same way you prepared your training data: run MegaDetector on the new images, then classify each animal box.  The `scripts/predict.py` script does the classification step.
+Once you have a fine-tuned model (`model_best.pt` from your run folder), you can run it on new images the same way you prepared your training data: run MegaDetector on the new images, then classify each animal box.  The `scripts/predict.py` script does the classification step.
 
-`predict.py` does not run MegaDetector for you, so you need a MegaDetector results file for the new images first (see "Running MegaDetector").  It also does not need the SpeciesNet starting weights or anything from training besides `model_best.pt`: that file already records your class list and the exact preprocessing, so predictions match training automatically.
+`predict.py` does not run MegaDetector for you, so you need a MegaDetector results file for the new images first (see "[running MegaDetector on your images](#running-megadetector-on-your-images)").  It also does not need the SpeciesNet starting weights or anything from your training run folder besides `model_best.pt`.
 
 A minimal run:
 
 ```bash
 python scripts/predict.py \
-    runs/my-first-run/model_best.pt \
-    md_results.json \
-    --image-root /path/to/new/images \
-    --output predictions.json
+    c:/path/to/your/run/folder/model_best.pt \
+    c:/path/to/your/megadetector_results.json \
+    c:/path/to/your/new/images \
+    c:/path/to/your/output_file.json
 ```
 
-By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see "Evaluation").  Pass `--csv-output` to instead write a simple per-box CSV (described below), which is handier if you only want to skim results in a spreadsheet.
+By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see "Evaluation").  Pass `--csv-output` to instead write a simple per-box .csv file (described below).
 
 ### Inference options
 
 | Option | Default | What it does |
 |---|---|---|
-| `--image-root` | (required) | The folder the MegaDetector filenames are relative to. |
-| `--output` | (required) | Where to write the results (a [MegaDetector-format](http://lila.science/megadetector-output-format) .json by default). |
-| `--csv-output` | off | Write a flat per-box CSV to `--output` instead of MegaDetector format. |
+| `model_file` | (required) | The model you want to run (e.g. `model_best.pt`). |
+| `md_results_file` | (required) | Your MegaDetector results file. |
+| `image_root` | (required) | The folder the MegaDetector filenames are relative to (i.e., the folder where your images are, on which you ran MegaDetector). |
+| `output_file` | (required) | Where to write the results (a [MegaDetector-format](http://lila.science/megadetector-output-format) .json by default). |
+| `--csv-output` | off | Write a flat per-box .csv file to instead of MegaDetector format. |
 | `--conf-threshold` | `0.1` | Only classify animal boxes at or above this MegaDetector confidence. |
 | `--topk` | `1` | How many top predictions (with scores) to record per box. |
 | `--batch-size` | `32` | Crops classified per batch. |
 | `--device` | `auto` | `auto` picks a GPU if one is available, otherwise the CPU. |
 
-### The MegaDetector format output
+### The default output file (MegaDetector format)
 
-The default output format follow the [MegaDetector output format](http://lila.science/megadetector-output-format).  This format is supported by the postprocessing tools in the [MegaDetector Python package](https://pypi.org/project/megadetector/), as well as by image review tools like [Timelapse](https://timelapse.ucalgary.ca/).
+The default output format follows the [MegaDetector output format](http://lila.science/megadetector-output-format).  This format is supported by the postprocessing tools in the [MegaDetector Python package](https://pypi.org/project/megadetector/), as well as by image review tools like [Timelapse](https://timelapse.ucalgary.ca/).
 
-### The CSV output
+#### The csv output format
 
 With `--csv-output` you get one row per classified animal box, not per image, because an image can contain several animals.  Each row gives the filename, the box (as normalized `x, y, w, h`), the MegaDetector detection confidence, and the model's prediction(s) and score(s):
 
@@ -508,4 +519,3 @@ python -m speciesnet_convert.convert \
 ```
 
 `--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet (see the agreement figures under "Fine-tuning").
-

@@ -18,7 +18,7 @@ Pass --csv-output to instead write a flat CSV with one row per classified box.
 
 Usage:
   python scripts/predict.py RUN_FOLDER/model_best.pt md_results.json \\
-      --image-root IMAGES --output predictions.json [--topk 5]
+      IMAGES predictions.json [--topk 5]
 """
 
 
@@ -237,8 +237,8 @@ def parse_args(argv=None):
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("checkpoint", help="model_best.pt from a training run")
     p.add_argument("md_results", help="MegaDetector results .json")
-    p.add_argument("--image-root", required=True, help="folder the MD filenames are relative to")
-    p.add_argument("--output", required=True, help="output path (MD-format .json by default)")
+    p.add_argument("image_root", help="folder the MegaDetector filenames are relative to")
+    p.add_argument("output_file", help="output path (MD-format .json by default; CSV with --csv-output)")
     p.add_argument("--csv-output", action="store_true",
                    help="write a flat CSV (one row per classified box) instead of MD format")
     p.add_argument("--conf-threshold", type=float, default=0.1,
@@ -253,7 +253,7 @@ def main(argv=None):
     args = parse_args(argv)
     predict(checkpoint=args.checkpoint,
             md_results=args.md_results,
-            output=args.output,
+            output=args.output_file,
             image_root=args.image_root,
             csv_output=args.csv_output,
             conf_threshold=args.conf_threshold,
