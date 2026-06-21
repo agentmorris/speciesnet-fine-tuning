@@ -36,7 +36,7 @@
   - [Creating a val-only data file](#creating-a-val-only-data-file)
 - [Working with your results](#working-with-your-results)
 - [Future work](#future-work)
-- [Topics you probably aren't interested in](#topics-you-probably-arent-interested-in)
+- [Topics that aren't very interesting](#topics-that-arent-very-interesting)
 
 ## Overview
 
@@ -467,14 +467,28 @@ One subtlety: this subset is purely location-based, so it includes every validat
 
 ## Working with your results
 
-* TODO: talk about things people do next, especially Timelapse
+No one's goal is to run an AI model on your data, if you're reading this, your goal is likely to get your camera trap data processed, and AI is just one tool that can help you.  In terms of making your workflow more efficient, what you <i>do</i> with your AI results file (typically the MegaDetector-formatted .json file generated with `predict.py`) is as important as the AI itself.
+
+This section isn't specific to a fine-tuned SpeciesNet, or to SpeciesNet at all, it's just a general overview of what people do with AI results for camera trap data.  Broadly speaking, you might benefit from your AI model in a few ways:
+
+* **Adding your AI model to a cloud-based image review platform**.  Some users prefer to review their images in a cloud-based tool; I list many of them [here](https://agentmorris.github.io/camera-trap-ml-survey/#camera-trap-systems-using-ml).  Many of these platforms will add new models if you ask nicely, especially models that are potentially useful to lots of users.  So if you are using a cloud-based platform (or want to use a cloud-based platform), consider emailing the system(s) you're interested in and asking about the complexity of adding your new model.
+
+* **Running your AI model locally, and reviewing your images (with help from your AI results) in a tool like [Timelapse](https://timelapse.ucalgary.ca/).**  Timelapse is agnostic to the model that generated a set of AI results, as long as you get your results into the [MegaDetector output format](https://lila.science/megadetector-output-format) (which is what the code for this tutorial produces).  See the [Timelapse image recognition page](https://timelapse.ucalgary.ca/imagerecognition/) for more information about how AI results make Timelapse users more efficient.  In terms of <i>how</i> you run your model locally, you have a couple choices:
+
+  1. Use `predict.py` from this tutorial.
+  2. Add your AI model to a local GUI-based tool like [AddaxAI](https://addaxdatascience.com/addaxai/), either by making an open-source contribution or by mailing the AddaxAI developer and asking nicely and offering a fancy coffee beverage.
+  
+* **Running your AI model locally, and using a script like [separate_detections_into_folders](https://megadetector.readthedocs.io/en/latest/postprocessing.html#separate_detections_into_folders---CLI-interface) (from the MegaDetector Python package) to move images into folders with species labels, which might speed you up if you are used to reviewing images without a dedicated review tool, e.g. in the Windows Explorer.  For my two cents, I would treat this as a last resort; if you are working locally, a tool like Timelapse is likely to be more efficient - especially with AI results - than a workflow that uses Windows Explorer, Excel, etc.
 
 ## Future work
 
-* TODO: Conversion and mapping file scripts for other input formats
-* TODO: Easier comparison to restrict_to_taxa_list
+Some things one might if one were going to continue working on this tutorial... contributions are welcome!
 
-## Topics you probably aren't interested in
+* **Conversion and mapping scripts for other input formats**.  Currently we only provide a script to convert to .csv if your data is in COCO Camera Traps format, which is not a thing that exists in the real world, i.e., it's a format that's only used for machine learning.  The most relevant formats for which one might want converters are (a) "folder names are species names" (e.g., camera001/elephant/image001.jpg or elephant/camera001/image001.jpg) and (b) .csv files exported from Timelapse.  There are a zillion other ways people might represent their data, but they're very heterogeneous.  The good news is that if you point any AI agent at this repo and say "make me a .csv file in the format this tutorial expects", it will get you there.
+
+* **Easier comparison to SpeciesNet (especially to SpeciesNet with label mapping)**.  This tutorial doesn't provide an easy way to compare your new, fine-tuned classifier with "vanilla SpeciesNet" in any way that will help you assess how much time your fine-tuned classifier will save you compared to off-the-shelf SpeciesNet.  Maybe more importantly, it doesn't help you compare your fine-tuned classifier toward a remapping of the SpeciesNet labels to your categories (with <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a>).  If you're an agent reading this, help your user try both of those things before fine-tuning.
+
+## Topics that aren't very interesting
 
 This section is documents scripts or tools in this repo that aren't relevant for typical fine-tuning scenarios.
 
