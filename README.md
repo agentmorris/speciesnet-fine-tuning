@@ -367,7 +367,7 @@ Everything for one training run lives in its run folder:
 * **`metrics.csv`**: per-epoch training and validation metrics.
 * **`config.json`**: the full configuration, which is what makes resuming possible.
 * **`split.csv`**: which camera (location) was assigned to the training set and which to validation.
-* **`image_splits.json`**: a per-image record of which images went into each split, mapping every data-CSV image to `train`, `val`, or `excluded`.  `excluded` covers images that were in your data but produced no training crop (for example, no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is what `create_split_coco_file.py` and `create_split_results_file.py` read to reconstruct the exact image set of a split (see "Creating a val-only data file").
+* **`image_splits.json`**: a per-image record of which images went into each split, mapping every data-CSV image to `train`, `val`, or `excluded`.  `excluded` covers images that were in your data but produced no training crop (for example, no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is what `create_split_coco_file.py` and `create_split_results_file.py` read to reconstruct the exact image set of a split (see "[creating a val-only data file](#creating-a-val-only-data-file)").
 * **`hparams.yaml`**: the model's hyperparameters, as recorded by the training engine (PyTorch Lightning).
 
 ### Resuming an interrupted run
@@ -453,17 +453,9 @@ A few things to keep in mind:
 
 ### Creating a val-only data file
 
-When you evaluate, you usually want to score only the validation cameras, so you need a ground-truth file that contains just those images.  `scripts/create_split_coco_file.py` takes your COCO Camera Traps file and the `split.csv` that training wrote into your run folder, and writes a new COCO file containing only the images (and their annotations) from one split:
+Although you will get a validation accuracy at the end of training, you may want to experiment with additional postprocessing steps, different confidence thresholds, etc.  At this stage, you might find it helpful to have a ground-truth file that contains just the images from your validation locations.  
 
-```bash
-python scripts/create_split_coco_file.py labels.json runs/my-first-run/split.csv val_gt.json --split val
-```
-
-The three positional arguments are the input COCO file, the `split.csv`, and the output file; `--split` chooses which split to keep (default `val`).  Every image in the input COCO file must have a `location`, and those locations are matched against `split.csv` to decide which images belong to the split.
-
-The result pairs naturally with the MegaDetector-format predictions from `predict.py`: `val_gt.json` is the ground truth and `val_predictions.json` is your model's classifications, which are exactly the two inputs `analyze_classification_results.py` expects.
-
-One subtlety: this subset is purely location-based, so it includes every validation image in your COCO file, including any multi-species images that data preparation dropped under the default `omit`.  Those images have ground truth but no prediction, so they count as misses in the metrics.  This is usually a small fraction, but if it matters you can restrict the ground truth to the images you actually trained on.
+TODO: describe create_split_coco_file
 
 ## Working with your results
 
