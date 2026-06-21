@@ -8,13 +8,13 @@
   - [Consider using AI to take it from here](#consider-using-ai-to-take-it-from-here)
   - [What to expect from species classification, and when fine-tuning is/isn't worth it](#what-to-expect-from-species-classification-and-when-fine-tuning-isisnt-worth-it)
   - [How much data do I need?](#how-much-data-do-i-need)
-- [Steps in this tutorial](#steps-in-this-tutorial)
+  - [Steps in this tutorial](#steps-in-this-tutorial)
 - [Setting up your environment](#setting-up-your-environment)
 - [Preparing your data](#preparing-your-data)
   - [The format this tutorial expects](#the-format-this-tutorial-expects)
-  - [Why `location` matters](#why-location-matters)
+  - [Why camera locations matter](#why-camera-locations-matter)
   - [How filenames are resolved](#how-filenames-are-resolved)
-  - [Creating your .csv file](#creating-your-csv-file)
+  - [Creating your data .csv file](#creating-your-data-csv-file)
   - [If your data is already in COCO Camera Traps format](#if-your-data-is-already-in-coco-camera-traps-format)
 - [Running MegaDetector on your images](#running-megadetector-on-your-images)
 - [Preparing a mapping file](#preparing-a-mapping-file)
@@ -94,7 +94,7 @@ So AI-based species classification is most likely to be helpful if you have comm
 
 * **Get the most out of "vanilla SpeciesNet"**.In particular, many issues that might make fine-tuning seem like a good option can be resolved by just remapping SpeciesNet's outputs differently, instead of using the standard SpeciesNet geofence (a list of taxa that are allowed in each country (or US state)).  You can do this with the <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a> function, which takes a list of SpeciesNet taxa in a .csv file, and maps them to whatever labels you want.  In addition to mapping one species to another, you could, for example, map all birds that aren't otherwise mapped to an "other bird" label.  This [skill](https://github.com/agentmorris/agentmorrispublic/blob/main/skills/speciesnet-taxonomy-mapping/SKILL.md) or this [app](http://dmorris.net/speciesnet-taxonomy-mapper) can help you make those .csv files.  More generally, I have some "pro tips" for getting the most out of MegaDetector and SpeciesNet [here](http://lila.science/speciesnet-pro-tips).
 
-* **Invest in workflow efficiency**.  Remember that the goal of processing your camera trap images with AI is to save you (ecologists) time, and in many cases the best hour that you can invest in saving yourself time isn't fine-tuning an AI model, it's increasing the efficiency of your workflow in ways that have nothing to do with AI.  Do you know all the keyboard shortcuts in whatever tool you use to review images?  If not, I recommend learning them (and practice using them) before going anywhere near fine-tuning an AI model.  Are you tagging species in an Excel spreadsheet?  That's OK, but it's not optimal, and you might find that learning to use an image review tool like [Timelapse](https://timelapse.ucalgary.ca/) gives you a bigger efficiency boost than you would get from investing time in fine-tuning a model.
+* **Invest in workflow efficiency**.  Remember that the goal of processing your camera trap images with AI is to save you (ecologists) time, and in many cases the best hour that you can invest in saving yourself time isn't fine-tuning an AI model, it's increasing the efficiency of your workflow in ways that have nothing to do with AI.  Are you using the mouse to move between images and assign species?  If so, I recommend moving to the keyboard.  Do you know all the keyboard shortcuts in whatever tool you use to review images?  If not, I recommend learning them (and practicing them) before fine-tuning an AI model.  Are you tagging species in an Excel spreadsheet?  That's OK, but it's not optimal, and you might find that learning to use an image review tool like [Timelapse](https://timelapse.ucalgary.ca/) gives you a bigger efficiency boost than you would get from investing time in fine-tuning a model.  All of these things are dull, but at least as important as AI accuracy in terms of making a camera trap workflow efficient.
 
 All that said, there are lots of good reasons to fine-tune your own model, so if I haven't talked you out of fine-tuning, read on!
 
@@ -106,7 +106,7 @@ So, consider grouping together categories that are very small in terms of traini
 
 Because we will be training on animals that are cropped out of their original images with MegaDetector, if you have a group of four elephants in an image, that "counts" as four examples.
 
-## Steps in this tutorial
+### Steps in this tutorial
 
 This is basically what's going to happen in the rest of this tutorial:
 
@@ -172,7 +172,7 @@ Two things to know about this format:
 * **An image can appear in more than one row.**  If a single photo contains both a zebra and an impala, it can have a `zebra` row and an `impala` row.
 * **The class names are entirely up to you.**  Whatever you put in the "category" column will be what your fine-tuned model predicts.  `blank` is the typical name for "no animal", and we recommend keeping it.
 
-### Why `location` matters
+### Why camera locations matter
 
 A camera trap dataset of 1,000,000 images might come from only ~200 cameras, and the images from a single camera are highly repetitive (same background, same lighting, often the same individual animals passing repeatedly). If you let images from one camera land in both your training and validation sets, your validation accuracy will look great, but won't reflect how your model will perform in the real world.
 
@@ -193,13 +193,13 @@ The `filename` value in a row in the .csv file can be any of the following:
 * **Relative to an image root** that you pass in separately.  For example, you can put your .csv file in a random folder, and specify --image-root as "c:/my_images", and in that case, "camera001/image001.jpg" is a valid value for `filename`.
 * **An absolute path** (e.g. "c:/my_images/camera001/image001.jpg").
 
-### Creating your .csv file
+### Creating your data .csv file
 
 Everyone's data is in a different format, so we can't provide universal guidelines for preparing your .csv file.  As long as you can get your data into the above format (a .csv with `filename`, `category`, and `location` columns), everything in the rest of this tutorial is agnostic to how you made that file.  If you would like help getting your data into that format, feel free to <a href="mailto:agentmorris@gmail.com">email me</a>.
 
 ### If your data is already in COCO Camera Traps format
 
-[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels. If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
+[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels, e.g., this is where you'll start if you are creating a fine-tuned model based on data from [LILA](https://lila.science/category/camera-traps/). If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
 
 You can run the script like this:
 
