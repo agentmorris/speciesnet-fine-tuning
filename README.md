@@ -30,7 +30,7 @@
   - [Choosing how much to fine-tune](#choosing-how-much-to-fine-tune)
 - [Running your fine-tuned model](#running-your-fine-tuned-model)
   - [Inference options](#inference-options)
-  - [The default output file (MegaDetector format)](#the-default-output-file-megadetector-format-output)
+  - [The default output file (MegaDetector format)](#the-default-output-file-megadetector-format)
   - [The csv output format](#the-csv-output-format)
 - [Working with your results](#working-with-your-results)
 - [Evaluation tips](#evaluation-tips)
@@ -43,7 +43,7 @@
 
 [SpeciesNet](https://github.com/google/cameratrapai/) is an AI model that classifies species in camera trap images.  SpeciesNet was trained on around 2,500 categories (mostly species, but also some higher-level taxa) from a [variety of global geographies](https://github.com/google/cameratrapai/blob/main/model_cards/v4.0.1a.md#country-distribution).  2,500 is a lot, but it's just a fraction of the species that are monitored with camera traps, so in some scenarios, users might benefit from a local model that "knows" the species in a particular study area.
 
-While it's possible to train a regionally-specific model from scratch, using SpeciesNet as a starting point can significantly reduce the amount of data required to train a new classifier.  However, Using SpeciesNet as a starting point doesn't make it <i>easier</i> to train a new model (in terms of technical complexity), it just reduces the amount of training data required.  The goal of this tutorial is to guide a user through the process of creating a fine-tuned version of SpeciesNet on your own data.
+While it's possible to train a regionally-specific model from scratch, using SpeciesNet as a starting point can significantly reduce the amount of data required to train a new classifier.  However, using SpeciesNet as a starting point doesn't make it <i>easier</i> to train a new model (in terms of technical complexity), it just reduces the amount of training data required.  The goal of this tutorial is to guide a user through the process of creating a fine-tuned version of SpeciesNet on your own data.
 
 This tutorial will ask you to set up a Python environment so you can run the code from this repo, but you won't need to <i>write</i> any code.
 
@@ -73,7 +73,7 @@ So AI-based species classification is most likely to be helpful if you have comm
 
 #### When fine-tuning might <i>not</i> be worth it
 
-* **If SpeciesNet is already very good at your common species, fine-tuning might not be worth it.**.  If AI species classification is most helpful for helping you avoid spending time on common, easy species, this also means that even if SpeciesNet doesn't know about your focal species, it might not be worth the hassle of fine-tuning, <i>as long as SpeciesNet has very high precision on your common classes</i>.  Maybe you would get better accuracy on your rare classes if you fine-tuned on your own data, and maybe you wouldn't, but in many scenarios, even if fine-tuning <i>does</i> improve accuracy, it won't save you any more time than the non-fine-tuned version.  E.g. if you are studying lynx in an area where you also have bobcats, and most of your images are blanks and cattle, maybe fine-tuning will get you 5% more accuracy differentiating bobcat from lynx, but this doesn't help you <i>at all</i> if you're going to look at all of those bobcat/lynx images anyway.
+* **If SpeciesNet is already very good at your common species, fine-tuning might not be worth it**.  If AI species classification is most helpful for helping you avoid spending time on common, easy species, this also means that even if SpeciesNet doesn't know about your focal species, it might not be worth the hassle of fine-tuning, <i>as long as SpeciesNet has very high precision on your common classes</i>.  Maybe you would get better accuracy on your rare classes if you fine-tuned on your own data, and maybe you wouldn't, but in many scenarios, even if fine-tuning <i>does</i> improve accuracy, it won't save you any more time than the non-fine-tuned version.  E.g. if you are studying lynx in an area where you also have bobcats, and most of your images are blanks and cattle, maybe fine-tuning will get you 5% more accuracy differentiating bobcat from lynx, but this doesn't help you <i>at all</i> if you're going to look at all of those bobcat/lynx images anyway.
 
 * **If SpeciesNet doesn't know about some of your species, but it consistently classifies them as some other species, fine-tuning is almost definitely not the ideal solution**.  E.g. if you have a lot of European red deer in your study area, and SpeciesNet consistently classifies them as elk (which don't co-occur with red deer), it's <i>much</i> easier to just re-map all the "elk" predictions to "red deer" than to fine-tune.  More on this kind of re-mapping below, in the "what might I try before fine-tuning?" section.
 
@@ -91,7 +91,7 @@ So AI-based species classification is most likely to be helpful if you have comm
 
 * **Try other models**. SpeciesNet is great (in my super-biased opinion), but it's not the only game in town.  If there's another classifier whose training distribution matches your species distribution pretty well, try that before fine-tuning.  I try to keep track of publicly-available species classification models [here](https://agentmorris.github.io/camera-trap-ml-survey/#publicly-available-ml-models-for-camera-traps).
 
-* **Get the most out of "vanilla SpeciesNet"**.In particular, many issues that might make fine-tuning seem like a good option can be resolved by just remapping SpeciesNet's outputs differently, instead of using the standard SpeciesNet geofence (a list of taxa that are allowed in each country (or US state)).  You can do this with the <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a> function, which takes a list of SpeciesNet taxa in a .csv file, and maps them to whatever labels you want.  In addition to mapping one species to another, you could, for example, map all birds that aren't otherwise mapped to an "other bird" label.  This [skill](https://github.com/agentmorris/agentmorrispublic/blob/main/skills/speciesnet-taxonomy-mapping/SKILL.md) or this [app](http://dmorris.net/speciesnet-taxonomy-mapper) can help you make those .csv files.  More generally, I have some "pro tips" for getting the most out of MegaDetector and SpeciesNet [here](http://lila.science/speciesnet-pro-tips).
+* **Get the most out of "vanilla SpeciesNet"**. In particular, many issues that might make fine-tuning seem like a good option can be resolved by just remapping SpeciesNet's outputs differently, instead of using the standard SpeciesNet geofence (a list of taxa that are allowed in each country (or US state)).  You can do this with the <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a> function, which takes a list of SpeciesNet taxa in a .csv file, and maps them to whatever labels you want.  In addition to mapping one species to another, you could, for example, map all birds that aren't otherwise mapped to an "other bird" label.  This [skill](https://github.com/agentmorris/agentmorrispublic/blob/main/skills/speciesnet-taxonomy-mapping/SKILL.md) or this [app](http://dmorris.net/speciesnet-taxonomy-mapper) can help you make those .csv files.  More generally, I have some "pro tips" for getting the most out of MegaDetector and SpeciesNet [here](http://lila.science/speciesnet-pro-tips).
 
 * **Invest in workflow efficiency**.  Remember that the goal of processing your camera trap images with AI is to save you (ecologists) time, and in many cases the best hour that you can invest in saving yourself time isn't fine-tuning an AI model, it's increasing the efficiency of your workflow in ways that have nothing to do with AI.  Are you using the mouse to move between images and assign species?  If so, I recommend moving to the keyboard.  Do you know all the keyboard shortcuts in whatever tool you use to review images?  If not, I recommend learning them (and practicing them) before fine-tuning an AI model.  Are you tagging species in an Excel spreadsheet?  That's OK, but it's not optimal, and you might find that learning to use an image review tool like [Timelapse](https://timelapse.ucalgary.ca/) gives you a bigger efficiency boost than you would get from investing time in fine-tuning a model.  All of these things are dull, but at least as important as AI accuracy in terms of making a camera trap workflow efficient.
 
@@ -123,11 +123,11 @@ The instructions in this tutorial will assume two things:
 
 2. You have a Python environment set up.  For folks new to Python, we recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
 
-Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, cd into that folder like this:
+Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, start a  Miniforge prompt, then cd into that folder like this:
 
 `cd c:\git\speciesnet-finetuning`
 
-Any folder is fine, I'm just using that as an example), start a Miniforge prompt, 
+Any folder is fine, I'm just using that as an example.
 
 Then create a new Python environment for this tutorial, like this (any environment name is fine, I'm just using "speciesnet-finetuning" as an example):
 
@@ -143,7 +143,7 @@ Then activate that environment like this:
 
 `pip install -r requirements.txt`
 
-That was a lot of random Python gibberish, I know, but if anything goes wrong, feel free to <a href="mailto:agentmorris@gmail.com">email me</a> with questions,  Or ask AI!  If you ask AI questions about setup stuff, consider pointing it to this README so it has the context of what we're trying to do.
+That was a lot of random Python gibberish, I know, but if anything goes wrong, feel free to <a href="mailto:agentmorris@gmail.com">email me</a> with questions, or ask AI!  If you ask AI questions about setup stuff, consider pointing it to this README so it has the context of what we're trying to do.
 
 ## Preparing your data
 
@@ -154,7 +154,7 @@ This tutorial does not require any particular organization of your files on disk
 | Column | What it contains |
 |---|---|
 | `filename` | The path to one image (see "how filenames are resolved" below). |
-| `category` | The label for that image... this usually a taxon (`zebra`, `impala`, `rodent`) or a non-taxonomic label like `blank`, but it can also include any other class you want the model to learn. |
+| `category` | The label for that image... this is usually a taxon (`zebra`, `impala`, `rodent`) or a non-taxonomic label like `blank`, but it can also include any other class you want the model to learn. |
 | `location` | The camera (aka "deployment" or "site") the image came from.  This is not latitude and longitude, just a unique name for each camera. |
 
 A minimal CSV looks like this:
@@ -305,9 +305,9 @@ By default, each labeled image becomes one training example per MegaDetector ani
 
 Before fine-tuning you should have:
 
-* **A data CSV** with `filename`, `category`, and `location` columns (see "[preparing your data]((#preparing-your-data)").
-* **A MegaDetector results file** covering those images (see "[running MegaDetector on your images](running-megadetector-on-your-images)").
-* **Optionally, a mapping file** to rename, merge, or drop classes (see "[preparing a mapping file](preparing-a-mapping-file)").
+* **A data CSV** with `filename`, `category`, and `location` columns (see "[preparing your data](#preparing-your-data)").
+* **A MegaDetector results file** covering those images (see "[running MegaDetector on your images](#running-megadetector-on-your-images)").
+* **Optionally, a mapping file** to rename, merge, or drop classes (see "[preparing a mapping file](#preparing-a-mapping-file)").
 
 ### Starting a fine-tuning run
 
@@ -324,7 +324,7 @@ python scripts/train.py \
 
 `--run-folder` is required and must not already exist; everything from the run is written there.
 
-The script prints a running summary, and when it finishes it writes the fine-tuned model to `runs/my-first-run/model_best.pt`.
+The script prints a running summary, and when it finishes it writes the fine-tuned model to `c:/path/to/your/output/folder/model_best.pt`.
 
 The training script will download the SpeciesNet weights from this repository; if you've already downloaded them, you can use the `--backbone-checkpoint` option to point the training script to the file you want to start training from.
 
@@ -346,7 +346,6 @@ These are the ones you can *probably* leave at their defaults, but you might wan
 
 | Option | Default | What it does |
 |---|---|---|
-| `--mapping` | (none) | Mapping CSV to rename, merge, or drop classes (see "Preparing a mapping file"). |
 | `--weighted-loss` | off | Weight the loss by inverse class frequency, to help rare classes. |
 | `--batch-size` | `32` | Crops per step, per GPU. |
 | `--lr` | `1e-4` | Learning rate. |
@@ -406,7 +405,7 @@ python scripts/predict.py \
     c:/path/to/your/output_file.json
 ```
 
-By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see "Evaluation").  Pass `--csv-output` to instead write a simple per-box .csv file (described below).
+By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see [evaluation tips](#evaluation-tips)).  Pass `--csv-output` to instead write a simple per-box .csv file (described below).
 
 ### Inference options
 
@@ -416,7 +415,7 @@ By default the output is a MegaDetector-format results file: a copy of your inpu
 | `md_results_file` | (required) | Your MegaDetector results file. |
 | `image_root` | (required) | The folder the MegaDetector filenames are relative to (i.e., the folder where your images are, on which you ran MegaDetector). |
 | `output_file` | (required) | Where to write the results (a [MegaDetector-format](http://lila.science/megadetector-output-format) .json by default). |
-| `--csv-output` | off | Write a flat per-box .csv file to instead of MegaDetector format. |
+| `--csv-output` | off | Write a flat per-box .csv file instead of writing a file in the MegaDetector output format. |
 | `--conf-threshold` | `0.1` | Only classify animal boxes at or above this MegaDetector confidence. |
 | `--topk` | `1` | How many top predictions (with scores) to record per box. |
 | `--batch-size` | `32` | Crops classified per batch. |
@@ -470,7 +469,7 @@ Although you will get a validation accuracy at the end of training, you may want
 
 ## Future work
 
-Some things one might if one were going to continue working on this tutorial... contributions are welcome!
+Some things one might do if one were going to continue working on this tutorial... contributions are welcome!
 
 * **Conversion and mapping scripts for other input formats**.  Currently we only provide a script to convert to .csv if your data is in COCO Camera Traps format, which is not a thing that exists in the real world, i.e., it's a format that's only used for machine learning.  The most relevant formats for which one might want converters are (a) "folder names are species names" (e.g., camera001/elephant/image001.jpg or elephant/camera001/image001.jpg) and (b) .csv files exported from Timelapse.  There are a zillion other ways people might represent their data, but they're very heterogeneous.  The good news is that if you point any AI agent at this repo and say "make me a .csv file in the format this tutorial expects", it will get you there.
 
@@ -478,7 +477,7 @@ Some things one might if one were going to continue working on this tutorial... 
 
 ## Topics that aren't very interesting
 
-This section is documents scripts or tools in this repo that aren't relevant for typical fine-tuning scenarios.
+This section documents scripts or tools in this repo that aren't relevant for typical fine-tuning scenarios.
 
 ### Converting the SpeciesNet weights to timm
 
@@ -520,7 +519,7 @@ python -m speciesnet_convert.convert \
     always_crop_99710272_22x8_v12_epoch_00148.keras
 ```
 
-`--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet (see the agreement figures under "Fine-tuning").
+`--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet.
 
 ### Creating a val-only data file
 
