@@ -25,16 +25,15 @@
   - [What you need](#what-you-need)
   - [Starting a fine-tuning run](#starting-a-fine-tuning-run)
   - [Fine-tuning options](#fine-tuning-options)
-  - [What a run produces](#what-a-run-produces)
+  - [What a fine-tuning run produces](#what-a-fine-tuning-run-produces)
   - [Resuming an interrupted run](#resuming-an-interrupted-run)
   - [Choosing how much to fine-tune](#choosing-how-much-to-fine-tune)
 - [Running your fine-tuned model](#running-your-fine-tuned-model)
   - [Inference options](#inference-options)
   - [The default output file (MegaDetector format)](#the-default-output-file-megadetector-format-output)
   - [The csv output format](#the-csv-output-format)
-- [Evaluation](#evaluation)
-  - [Creating a val-only data file](#creating-a-val-only-data-file)
 - [Working with your results](#working-with-your-results)
+- [Evaluation tips](#evaluation-tips)
 - [Future work](#future-work)
 - [Topics that aren't very interesting](#topics-that-arent-very-interesting)
 
@@ -357,7 +356,7 @@ These are the ones you can *probably* leave at their defaults, but you might wan
 | `--devices` | `auto` | `auto` uses all GPUs; or give an integer count. |
 | `--seed` | `0` | Random seed (this also determines the train/val split). |
 
-### What a run produces
+### What a fine-tuning run produces
 
 Everything for one training run lives in its run folder:
 
@@ -446,22 +445,11 @@ A few things to keep in mind:
 * **`blank` is a prediction, not an absence of a box.** If you trained a `blank` class, the model can label an animal box as `blank` when it thinks the box is actually empty (a MegaDetector false positive).  An image where MegaDetector found no animal at all is "blank" in a different sense: it has no animal box to classify.
 * **The model only knows your classes.** It predicts from the label set you trained on, using your names, and has no knowledge of SpeciesNet's broader taxonomy or its geofence.  Anything outside your classes will be forced into the closest class you did train.
 
-## Evaluation
-
-* TODO: describe analyze_classification_results.py (for labeled data)
-* TODO: describe postprocess_batch_results.py(for unlabeled data)
-
-### Creating a val-only data file
-
-Although you will get a validation accuracy at the end of training, you may want to experiment with additional postprocessing steps, different confidence thresholds, etc.  At this stage, you might find it helpful to have a ground-truth file that contains just the images from your validation locations.  
-
-TODO: describe create_split_coco_file
-
 ## Working with your results
 
-No one's goal is to run an AI model on your data, if you're reading this, your goal is likely to get your camera trap data processed, and AI is just one tool that can help you.  In terms of making your workflow more efficient, what you <i>do</i> with your AI results file (typically the MegaDetector-formatted .json file generated with `predict.py`) is as important as the AI itself.
+No one's goal is to run an AI model on your data; if you're reading this, your goal is likely to get your camera trap data processed, and AI is just one tool that can help you.  In terms of making your workflow more efficient, what you <i>do</i> with your AI results file (e.g., the MegaDetector-formatted .json file generated with `predict.py` from this tutorial) is as important as the AI itself.
 
-This section isn't specific to a fine-tuned SpeciesNet, or to SpeciesNet at all, it's just a general overview of what people do with AI results for camera trap data.  Broadly speaking, you might benefit from your AI model in a few ways:
+This section isn't specific to a fine-tuned SpeciesNet, or to anything having to do with SpeciesNet, it's just a general overview of what people do with AI results for camera trap data.  Broadly speaking, you might benefit from your AI model in a few ways:
 
 * **Adding your AI model to a cloud-based image review platform**.  Some users prefer to review their images in a cloud-based tool; I list many of them [here](https://agentmorris.github.io/camera-trap-ml-survey/#camera-trap-systems-using-ml).  Many of these platforms will add new models if you ask nicely, especially models that are potentially useful to lots of users.  So if you are using a cloud-based platform (or want to use a cloud-based platform), consider emailing the system(s) you're interested in and asking about the complexity of adding your new model.
 
@@ -471,6 +459,14 @@ This section isn't specific to a fine-tuned SpeciesNet, or to SpeciesNet at all,
   2. Add your AI model to a local GUI-based tool like [AddaxAI](https://addaxdatascience.com/addaxai/), either by making an open-source contribution or by mailing the AddaxAI developer and asking nicely and offering a fancy coffee beverage.
   
 * **Running your AI model locally, and using a script like [separate_detections_into_folders](https://megadetector.readthedocs.io/en/latest/postprocessing.html#separate_detections_into_folders---CLI-interface) (from the MegaDetector Python package) to move images into folders with species labels, which might speed you up if you are used to reviewing images without a dedicated review tool, e.g. in the Windows Explorer.  For my two cents, I would treat this as a last resort; if you are working locally, a tool like Timelapse is likely to be more efficient - especially with AI results - than a workflow that uses Windows Explorer, Excel, etc.
+
+## Evaluation tips
+
+Although you will get a validation accuracy at the end of training, you may want to experiment with additional postprocessing steps, different confidence thresholds, etc.  Furthermore, at some point, you will be running your model on new data where you <i>don't</i> already have labels, and you'll want a way to check that your model is still doing OK.  There's no universal recipe for any of these evaluations, but there are two approaches that I use regularly when I run SpeciesNet (and other models) on user data:
+
+* **When I want to get a feel for how a model works on data where correct labels aren't available**, I use [postprocess_batch_results](https://megadetector.readthedocs.io/en/latest/postprocessing.html#postprocess_batch_results---CLI-interface) (from the MegaDetector Python package).  This will sample a subset of your images and make an HTML file (like [this one](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-previews/speciesnet-postprocessing-examples/idaho-camera-traps/index.html)) that makes it quick for you to ask, e.g., "are almost all of the images that AI thinks are hippos actually hippos?"
+
+* **When I want to get a feel for how a model works on data where correct labels <i>are</i> available**, particularly to ask questions like, e.g., "what would I miss if I auto-accepted everything that AI thinks is a hippo?", I use [analyze_classification_results](https://megadetector.readthedocs.io/en/latest/postprocessing.html#analyze_classification_results---CLI-interface) (from the MegaDetector Python package).  This will produce traditional precision/recall scores for each category, but these can be very misleading (often they are cases where the ground truth is wrong, or where just a couple pixels of an ear are visible), so more importantly, it will produce an HTML page that lets you <i>look</i> at examples of common misclassifications.
 
 ## Future work
 
@@ -525,3 +521,20 @@ python -m speciesnet_convert.convert \
 ```
 
 `--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet (see the agreement figures under "Fine-tuning").
+
+### Creating a val-only data file
+
+Although you will get a validation accuracy at the end of training, you may want to experiment with additional postprocessing steps, different confidence thresholds, etc.  At this stage, you might find it helpful to have a ground-truth file that contains just the images from your validation split.  However, since everyone's data begins life in a totally different format, there's no universal way to create that file.  This subsection is buried in the "topics that aren't very interesting" section of the tutorial because we're describing how to do this for data that's in [COCO Camera Traps](http://lila.science/coco-camera-traps) format, which is only really used in very machine-learning-y contexts, i.e. it doesn't really exist in the real world.  That said, if you have a COCO Camera Traps file that describes your ground truth data, or you're an agent reading this and you can help your user create one, read on...
+
+`create_split_coco_file.py` takes your full COCO Camera Traps file and writes a new COCO file containing only the images (and their annotations) from a chosen split, by default the validation split.  The result is a drop-in ground-truth file for an evaluation tool, scoped to exactly the images you want to score.
+
+You point it at a "split source", which can be either of the two split records a training run leaves behind:
+
+* **`image_splits.json`** (recommended): the per-image record from your run folder.  Images are selected by file name, so the output matches your validation set exactly (image for image), and you can also extract the `excluded` set with `--split excluded` if you want to inspect it.
+* **`split.csv`**: the per-camera record.  Images are selected by location, so every image from a validation camera is included, even ones that produced no training crop (no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is a slightly larger set than the images the model was actually validated on.
+
+```bash
+python scripts/create_split_coco_file.py labels.json RUN_FOLDER/image_splits.json val_gt.json --split val
+```
+
+The first argument is your COCO file, the second is the split source, and the third is the output COCO file; `--split` chooses which split to extract (default `val`).  Pair the resulting `val_gt.json` with predictions to evaluate on the validation set alone: use `create_split_results_file.py` (its companion, which scopes a MegaDetector-format results file to the same split) so that the ground truth and the predictions cover exactly the same images.
