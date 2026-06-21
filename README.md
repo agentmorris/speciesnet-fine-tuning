@@ -14,8 +14,7 @@
   - [The format this tutorial expects](#the-format-this-tutorial-expects)
   - [Why camera locations matter](#why-camera-locations-matter)
   - [How filenames are resolved](#how-filenames-are-resolved)
-  - [Creating your data .csv file](#creating-your-data-csv-file)
-  - [If your data is already in COCO Camera Traps format](#if-your-data-is-already-in-coco-camera-traps-format)
+  - [Creating your data .csv file](#creating-your-data-csv-file)  
 - [Running MegaDetector on your images](#running-megadetector-on-your-images)
 - [Preparing a mapping file](#preparing-a-mapping-file)
   - [Why you might remap your categories](#why-you-might-remap-your-categories)
@@ -194,11 +193,11 @@ The `filename` value in a row in the .csv file can be any of the following:
 
 ### Creating your data .csv file
 
-Everyone's data is in a different format, so we can't provide universal guidelines for preparing your .csv file.  As long as you can get your data into the above format (a .csv with `filename`, `category`, and `location` columns), everything in the rest of this tutorial is agnostic to how you made that file.  If you would like help getting your data into that format, feel free to <a href="mailto:agentmorris@gmail.com">email me</a>.
+Everyone's data is in a different format, so we can't provide universal guidelines for preparing your .csv file.  As long as you can get your data into the above format (a .csv with `filename`, `category`, and `location` columns), everything in the rest of this tutorial is agnostic to how you made that file.  If you would like help getting your data into that format, feel free to <a href="mailto:agentmorris@gmail.com">email me</a>.  But also, this is a great task for AI: if you describe how your data is organized and point AI to this page, it will have no trouble creating a .csv file that follows the format described above.
 
-### If your data is already in COCO Camera Traps format
+#### If your data is already in COCO Camera Traps format
 
-[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels, e.g., this is where you'll start if you are creating a fine-tuned model based on data from [LILA](https://lila.science/category/camera-traps/). If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
+[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels among machine-learning-y types, e.g., this is where you'll start if you are creating a fine-tuned model based on data from [LILA](https://lila.science/category/camera-traps/). If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
 
 You can run the script like this:
 
