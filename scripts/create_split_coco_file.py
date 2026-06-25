@@ -33,6 +33,12 @@ import json
 import os
 import sys
 
+file_dir = os.path.dirname(os.path.abspath(__file__))
+if file_dir not in sys.path:
+    sys.path.insert(0, file_dir)
+
+from mapping import load_mapping, apply_mapping, mapping_warnings
+
 
 #%% Support functions
 
@@ -90,12 +96,72 @@ def load_image_splits(split_json, split_name):
     return files
 
 
+def apply_category_mapping(coco, mapping_file):
+    """
+    Remap the category names in a COCO object in place, using a training-style
+    mapping CSV.
+
+    Renames, merges, or drops categories per [mapping_file] (see mapping.py),
+    regenerates category IDs (merging collapses several source categories into a
+    single output category), rewrites each annotation's category_id to match, and
+    drops annotations whose category was removed. [coco] is modified in place.
+
+    Args:
+        coco (dict): a parsed COCO Camera Traps object; its "categories" and
+            "annotations" are replaced
+        mapping_file (str): path to a category mapping CSV (columns input,output)
+    """
+
+    mapping = load_mapping(mapping_file)
+    cats = coco.get("categories", [])
+
+    for w in mapping_warnings(mapping, {c["name"] for c in cats}):
+        eprint("WARNING: " + w)
+
+    # Assign a fresh id to each surviving output category, in order of first
+    # appearance among the original categories, and record how each old id maps
+    # to a new one (None for categories dropped via "remove")
+    new_name_to_id = {}
+    new_categories = []
+    old_id_to_new_id = {}
+    for c in cats:
+        new_name = apply_mapping(c["name"], mapping)
+        if new_name is None:
+            old_id_to_new_id[c["id"]] = None
+            continue
+        if new_name not in new_name_to_id:
+            new_id = len(new_categories)
+            new_name_to_id[new_name] = new_id
+            new_categories.append({"id": new_id, "name": new_name})
+        old_id_to_new_id[c["id"]] = new_name_to_id[new_name]
+
+    # Rewrite annotations to the new category ids, dropping any whose category was
+    # removed (mapped to None, hence a None new id)
+    new_annotations = []
+    n_dropped = 0
+    for a in coco.get("annotations", []):
+        new_id = old_id_to_new_id.get(a.get("category_id"))
+        if new_id is None:
+            n_dropped += 1
+            continue
+        a = dict(a)
+        a["category_id"] = new_id
+        new_annotations.append(a)
+
+    coco["categories"] = new_categories
+    coco["annotations"] = new_annotations
+
+    eprint("Applied mapping '%s': %d categories -> %d, dropped %d annotation(s) in "
+           "removed categories." % (mapping_file, len(cats), len(new_categories), n_dropped))
+
+
 #%% Main function
 
 def create_split_coco_file(input_coco,
                            split_source,
                            output_json,
-                           split='val'):
+                           split='val',
+                           mapping_file=None):
     """
     Given a COCO Camera Traps file and a split source, write a new COCO file
     containing only the images, and their annotations, that belong to a chosen
@@ -105,6 +171,11 @@ def create_split_coco_file(input_coco,
     in which case images are selected by their "location" field, or a per-image
     split .json (file name -> "train"/"val"/"excluded", as written by train.py),
     in which case images are selected by file name and [split] may be "excluded".
+
+    If [mapping_file] is given, category names are renamed, merged, or dropped
+    first (using the same logic as training), so the output's labels match the
+    classes the model was trained on. Category IDs are regenerated, since merging
+    collapses several source categories into one.
 
     Args:
         input_coco (str): path to the COCO Camera Traps .json file to filter
@@ -117,12 +188,20 @@ def create_split_coco_file(input_coco,
             created if needed
         split (str, optional): split name to extract, e.g. "train" or "val" (and,
             for a per-image split file, "excluded") (default "val")
+        mapping_file (str, optional): path to a category mapping CSV (columns
+            input,output), in the same format as train.py's --mapping; when given,
+            category names are remapped and annotations of removed categories are
+            dropped before the split is applied (default None, no remapping)
     """
 
     use_image_splits = str(split_source).lower().endswith(".json")
 
     with open(input_coco, encoding="utf-8") as f:
         coco = json.load(f)
+
+    if mapping_file:
+        apply_category_mapping(coco, mapping_file)
+
     images = coco.get("images", [])
 
     not_in_any_split = 0
@@ -180,6 +259,9 @@ def parse_args(argv=None):
                    "per-image split .json (filename -> split) from a training run")
     p.add_argument("output_json", help="output COCO .json for the chosen split")
     p.add_argument("--split", default="val", help="split name to extract (default: val)")
+    p.add_argument("--mapping-file", default=None,
+                   help="optional category mapping CSV (columns input,output, same format as "
+                   "train.py's --mapping); remaps category names before splitting")
     return p.parse_args(argv)
 
 
@@ -188,7 +270,8 @@ def main(argv=None):
     create_split_coco_file(input_coco=args.input_coco,
                            split_source=args.split_source,
                            output_json=args.output_json,
-                           split=args.split)
+                           split=args.split,
+                           mapping_file=args.mapping_file)
 
 if __name__ == "__main__":
     main()

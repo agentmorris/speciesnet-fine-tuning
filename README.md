@@ -8,6 +8,7 @@
   - [Consider using AI to take it from here](#consider-using-ai-to-take-it-from-here)
   - [What to expect from species classification, and when fine-tuning is/isn't worth it](#what-to-expect-from-species-classification-and-when-fine-tuning-isisnt-worth-it)
   - [How much data do I need?](#how-much-data-do-i-need)
+  - [Sample data](#sample data)
   - [Steps in this tutorial](#steps-in-this-tutorial)
 - [Setting up your environment](#setting-up-your-environment)
 - [Preparing your data](#preparing-your-data)
@@ -104,6 +105,21 @@ So, consider grouping together categories that are very small in terms of traini
 
 Because we will be training on animals that are cropped out of their original images with MegaDetector, if you have a group of four elephants in an image, that "counts" as four examples.
 
+### Sample data
+
+Throughout this tutorial, I am going to use the [Orinoquía Camera Traps](https://lila.science/datasets/orinoquia-camera-traps/) dataset as an example.  You likely want to work with your own data, but if you want to follow along, start by downloading the data from that page:
+
+* [Zipfile of all the images](https://storage.googleapis.com/public-datasets-lila/orinoquia-camera-traps/orinoquia_camera_traps_images.zip)
+* [Zipfile of the metadata](https://storage.googleapis.com/public-datasets-lila/orinoquia-camera-traps/orinoquia_camera_traps_metadata.zip)
+
+This dataset contains around 100k images; for this tutorial, we will be ignoring the ~20k empty images.
+
+At each step in the tutorial, there will be a heading called "applying this to the sample data", where I link to a file that was created for that step using this dataset.
+
+Gratuitous image from this dataset to keep your attention:
+
+<img src="images/orinoquia-thumb-web.jpg" style="width:500px;"/>
+
 ### Steps in this tutorial
 
 This is basically what's going to happen in the rest of this tutorial:
@@ -118,9 +134,9 @@ This is basically what's going to happen in the rest of this tutorial:
 
 The instructions in this tutorial will assume two things:
 
-1. You have cloned this GitHub repository to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.
+1. This tutorial assumes that you have cloned this GitHub repository to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.
 
-2. You have a Python environment set up.  For folks new to Python, we recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
+2. This tutorial assumes that you have a Python environment set up.  For folks new to Python, we recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
 
 Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, start a  Miniforge prompt, then cd into that folder like this:
 
@@ -160,15 +176,16 @@ A minimal CSV looks like this:
 
 ```csv
 filename,category,location
-2018_NB47_000508.JPG,baboon,NB47
-2018_NB46_000062.JPG,impala,NB46
-2018_NB44_000435.JPG,blank,NB44
+A01/01100085.JPG,black_agouti,A01
+A01/01140096.JPG,collared_peccary,A01
+A01/01140097.JPG,empty,A01
+A01/01290101.JPG,spixs_guan,A01
 ```
 
 Two things to know about this format:
 
-* **An image can appear in more than one row.**  If a single photo contains both a zebra and an impala, it can have a `zebra` row and an `impala` row.
-* **The class names are entirely up to you.**  Whatever you put in the "category" column will be what your fine-tuned model predicts.  `blank` is the typical name for "no animal", and we recommend keeping it.
+* **An image can appear in more than one row.**  If a single photo contains both a black agouti and an collared peccary, it can have a `black_agouti` row and an `collared_peccary` row.
+* **The class names are entirely up to you.**  Whatever you put in the "category" column will be what your fine-tuned model predicts.
 
 ### Why camera locations matter
 
@@ -199,11 +216,15 @@ Everyone's data is in a different format, so we can't provide universal guidelin
 
 [COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels among machine-learning-y types, e.g., this is where you'll start if you are creating a fine-tuned model based on data from [LILA](https://lila.science/category/camera-traps/). If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
 
-You can run the script like this:
+You can run the script like this (assuming you cloned this repo to `c:\git\speciesnet-finetuning` and created a Python environment called `speciesnet-finetuning`):
 
 ```bash
+cd c:\git\speciesnet-finetuning
+mamba activate speciesnet-finetuning
 python scripts/coco_to_csv.py path/to/labels.json path/to/output.csv
 ```
+
+Replace "path/to/labels.json" with the location of your COCO Camera Traps .json file, and replace "path/to/output.csv" with the location where you want to write the new .csv file.
 
 The options:
 
@@ -217,6 +238,10 @@ The options:
 
 The default value for `--multiple-label-handling` is `omit`, which throws away any image that contains more than one category.  This is because we have no way to determine which animal in the image goes with which category.
 
+#### Applying this to the sample data
+
+I ran `coco_to_csv.py` on the .json file for Orinoquía Camera Traps (our sample dataset), the resulting .csv file is [here](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/orinoquia_camera_traps.json.csv), with one row per label (around 100k rows total).
+
 ## Running MegaDetector on your images
 
 SpeciesNet relies on [MegaDetector](https://github.com/agentmorris/MegaDetector) to *find* animals, before SpeciesNet can classify them.  Fine-tuned versions of SpeciesNet work the same way.  Consequently, before you can create a fine-tuned model on your data, you need to run MegaDetector on your data.
@@ -229,6 +254,10 @@ The two most common ways to run MegaDetector are:
 * Following the instructions [here](https://github.com/agentmorris/MegaDetector/blob/main/megadetector.md#using-megadetector) to run MegaDetector at the command line (with the [MegaDetector Python package](https://megadetector.readthedocs.io/))
 
 Both approaches produce the right file format.
+
+#### Applying this to the sample data
+
+I cheated for the sample data for this step, because I've already run MegaDetector for [every dataset on LILA](https://lila.science/megadetector-results-for-camera-trap-datasets/).  The specific MegaDetector results file I used is [here](https://lila.science/public/lila-md-results/orinoquia-camera-traps_public_mdv5a.0.0_results.filtered_rde_0.150_0.850_10_0.200.json.zip).  But if I hadn't already run MD on this data, I would have used AddaxAI.
 
 ## Preparing a mapping file
 
@@ -253,21 +282,21 @@ Here is an example of what a mapping .csv file looks like:
 
 ```csv
 input,output
-hyena_spotted,hyena
-hyena_striped,hyena
-lion_male,lion
-lion_female,lion
-crane,other_bird
-eagle,other_bird
-animal,remove
-zebra,
+black_agouti,agouti
+collared_peccary,
+orinoco_agouti,agouti
+empty,remove
+human,remove
+spotted_paca,
+rodent,
+white-lipped_peccary,
 ```
 
 The `output` column decides what happens to each `input` category:
 
-* **A name** renames the category; several inputs sharing one output are merged (so `hyena_spotted` and `hyena_striped` above both become `hyena`).
-* **The word `remove`** drops the category entirely; its images contribute nothing to training.
-* **If the output column is left blank**, the category is unchanged, which is identical to not listing it at all.  For example, the `zebra` row above is just documentation; you could delete it.
+* **A name** renames the category; several inputs sharing one output are merged (so `black_agouti` and `orinoco_agouti` above both become `agouti`).
+* **The word `remove`** drops the category entirely; its images contribute nothing to training (so we are dropping the `human` and `empty` labels in the example above).
+* **If the output column is left blank**, the category is unchanged, which is identical to not listing it at all.  For example, the `spotted_paca` row above is just documentation; you could delete it and `spotted_paca` would still be its own category.
 
 Two rules: each `input` may appear only once, and the mapping is applied in a single pass, so if you map `A` to `B` and also `B` to `C`, an `A` becomes `B`, not `C`.
 
@@ -283,16 +312,25 @@ The result has one row per category (plus a row for `unlabeled`, the images with
 
 ```csv
 input,output,count
-wildebeest,,6870
-gazelle_thomsons,,6227
+collared_peccary,,24784
+empty,,20334
+black_agouti,,14206
+human,,7441
+unknown_bird,,5766
+unknown_armadillo,,5732
 ...
-sparrow,,1
-unlabeled,,0
+coiban_agouti,,1
+giant_otter,,1
+unknown_tayra,,1
 ```
 
-Use `count` to decide what to merge or drop; the long tail at the bottom is where merging into coarser classes usually helps.  Then fill in the `output` column and pass the file to training with `--mapping` (see "Fine-tuning").
+The `count` column will be ignored in the training process, but it may be helpful when you're deciding what to merge or drop; the long tail at the bottom is where merging into coarser classes usually helps.  Then fill in the `output` column and pass the file to training with `--mapping` (see "Fine-tuning").
 
-One caveat about `count`: it is the number of *images* per category, which is a good planning guide, but the model actually trains on MegaDetector crops, so the number of training examples per class will differ (an image of a herd yields many crops; a `blank` image usually yields none).  The exact per-class crop counts that training used, after your mapping and the minimum-count filter, are reported in the run's `summary.md`.
+One caveat about `count`: it is the number of *images* per category, which is a useful guide, but the model actually trains on MegaDetector crops, so the number of training examples per class will differ.
+
+#### Applying this to the sample data
+
+[Here](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/orinoquia_camera_traps.json.mapping.csv) is a .csv file that maps the 51 categories in the Orinoquía Camera Traps dataset to a smaller number of categories.  There are some decisions involved at this step: for example, because there are 14k black agouti examples in the dataset, and a total of four examples (not 5k, literally four) of "Orinoco agouti" and "coiban agouti", I mapped all of those categories to a new category called "agouti".  That doesn't mean a user of this model doesn't care about the distinction between black agoutis and coiban agoutis, it just means that's not a distinction that AI can help with.  I also made a decision not to use the "empty" category (we will rely on MegaDetector to eliminate blanks), and I merged a bunch of classes into "other_mammal".  There's no formula for doing this, it depends on your dataset and your goals.
 
 ## Fine-tuning
 
@@ -387,6 +425,26 @@ A few other practical notes:
 * **For imbalanced data, try `--weighted-loss`.** Camera trap datasets are very long-tailed, and weighting the loss pushes the model to pay more attention to rarer classes, at some cost to accuracy on the common ones.
 * **Your validation numbers are only as honest as your locations.** Because the split is by camera, validation accuracy reflects how well the model will do on cameras it has never seen.  If you put every image under one location, those numbers will be optimistic.
 * **Rare, visually similar classes are hard.** If two species are nearly indistinguishable in your images, consider merging them in the mapping file rather than expecting the model to separate them.
+
+#### Applying this to the sample data
+
+The import stuff on my computer at the time I made this tutorial was:
+
+* I'm writing all the output data (including the mapping file from the previous step) to `c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260624`
+* The images are in `f:/data/orinoquia-camera-traps/public`
+* The MegaDetector results file for these images is at `f:/data/orinoquia-camera-traps/orinoquia-camera-traps_public_mdv5a.0.0_results.filtered_rde_0.150_0.850_10_0.200.json`
+
+With that in mind, I trained a model like this:
+
+```bash
+python train.py --data-csv "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625\orinoquia_camera_traps.json.csv" --image-root "f:/data/orinoquia-camera-traps/public" --md-results "f:/data/orinoquia-camera-traps/orinoquia-camera-traps_public_mdv5a.0.0_results.filtered_rde_0.150_0.850_10_0.200.json" --run-folder "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625" --mapping "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625\orinoquia_camera_traps.json.mapping.csv" --unfreeze-blocks 1 --patience 4 --allow-existing-run-folder
+```
+
+So satisfying when training starts running:
+
+<img src="images/finetuning-shell.png"/>
+
+I am only training one layer (`--unfreeze-blocks 1`), so validation accuracy saturated pretty quickly; this model trained in less than an hour.
 
 ## Running your fine-tuned model
 
@@ -536,3 +594,5 @@ python scripts/create_split_coco_file.py labels.json RUN_FOLDER/image_splits.jso
 ```
 
 The first argument is your COCO file, the second is the split source, and the third is the output COCO file; `--split` chooses which split to extract (default `val`).  Pair the resulting `val_gt.json` with predictions to evaluate on the validation set alone: use `create_split_results_file.py` (its companion, which scopes a MegaDetector-format results file to the same split) so that the ground truth and the predictions cover exactly the same images.
+
+The `--mapping_file` argument can be used to map category names, just like we do when we're training (if supplied, this should be a .csv file with "input" and "output" columns).
