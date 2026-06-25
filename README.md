@@ -20,7 +20,6 @@
 [**Preparing a mapping file**](#preparing-a-mapping-file)  
 &nbsp;&nbsp;[Why you might remap your categories](#why-you-might-remap-your-categories)  
 &nbsp;&nbsp;[The mapping CSV format](#the-mapping-csv-format)  
-&nbsp;&nbsp;[Generating a template mapping file](#generating-a-template-mapping-file)  
 [**Fine-tuning**](#fine-tuning)  
 &nbsp;&nbsp;[What you need](#what-you-need)  
 &nbsp;&nbsp;[Starting a fine-tuning run](#starting-a-fine-tuning-run)  
@@ -30,8 +29,6 @@
 &nbsp;&nbsp;[Choosing how much to fine-tune](#choosing-how-much-to-fine-tune)  
 [**Running your fine-tuned model**](#running-your-fine-tuned-model)  
 &nbsp;&nbsp;[Inference options](#inference-options)  
-&nbsp;&nbsp;[The default output file (MegaDetector format)](#the-default-output-file-megadetector-format)  
-&nbsp;&nbsp;[The csv output format](#the-csv-output-format)  
 [**Working with your results**](#working-with-your-results)  
 [**Evaluation tips**](#evaluation-tips)  
 [**Future work**](#future-work)  
@@ -46,6 +43,8 @@
 While it's possible to train a regionally-specific model from scratch, using SpeciesNet as a starting point can significantly reduce the amount of data required to train a new classifier.  However, using SpeciesNet as a starting point doesn't make it <i>easier</i> to train a new model (in terms of technical complexity), it just reduces the amount of training data required.  The goal of this tutorial is to guide a user through the process of creating a fine-tuned version of SpeciesNet on your own data.
 
 This tutorial will ask you to set up a Python environment so you can run the code from this repo, but you won't need to <i>write</i> any code.
+
+You may want to work through this tutorial on your own data, but examples in this tutorial will use the [Orinoquía Camera Traps](https://lila.science/datasets/orinoquia-camera-traps/) dataset, so you can follow along if you don't have your own data.
 
 If you have any questions or feedback about this tutorial, or you get stuck, or anything here is just outright wrong, <a href="mailto:agentmorris@gmail.com">email me</a>!
 
@@ -127,16 +126,16 @@ This is basically what's going to happen in the rest of this tutorial:
 1. Setting up your environment: cloning this repository, installing Python, etc.
 2. Getting your data into the format the tutorial code needs to figure out which images contain which species.
 3. Running [MegaDetector](https://github.com/agentmorris/MegaDetector) on your images.
-4. Creating your fine-tuned model.
+4. Creating your fine-tuned model (i.e., training).
 5. Running your fine-tuned model.
 
 ## Setting up your environment
 
 The instructions in this tutorial will assume two things:
 
-1. This tutorial assumes that you have cloned this GitHub repository to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.
+1. This tutorial assumes that you have cloned this [GitHub repository](https://github.com/agentmorris/speciesnet-fine-tuning) to your computer.  Rather than taking up lots of space here describing all the ways one might install git, I'm going to punt this one to AI: if you have never cloned a git repo before or you're not sure whether you have git installed, ask AI.  But, tl;dr:<br/><br/>`git clone https://github.com/agentmorris/speciesnet-fine-tuning`.
 
-2. This tutorial assumes that you have a Python environment set up.  For folks new to Python, we recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
+2. This tutorial assumes that you have a Python environment set up.  For folks new to Python, I recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
 
 Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, start a  Miniforge prompt, then cd into that folder like this:
 
@@ -164,7 +163,7 @@ That was a lot of random Python gibberish, I know, but if anything goes wrong, f
 
 ### The format this tutorial expects
 
-This tutorial does not require any particular organization of your files on disk.  Instead, you will describe your dataset with a .csv file with one row per labeled image, and the following three columns:
+This tutorial does not require any particular organization of your images on disk.  Instead, you will describe your dataset with a .csv file with one row per labeled image, and the following three columns:
 
 | Column | What it contains |
 |---|---|
@@ -184,8 +183,8 @@ A01/01290101.JPG,spixs_guan,A01
 
 Two things to know about this format:
 
-* **An image can appear in more than one row.**  If a single photo contains both a black agouti and an collared peccary, it can have a `black_agouti` row and an `collared_peccary` row.
-* **The class names are entirely up to you.**  Whatever you put in the "category" column will be what your fine-tuned model predicts.
+* *An image can appear in more than one row.*  If a single photo contains both a black agouti and an collared peccary, it can have a `black_agouti` row and an `collared_peccary` row.
+* *The class names are entirely up to you.*  Whatever you put in the "category" column will be what your fine-tuned model predicts.
 
 ### Why camera locations matter
 
@@ -204,9 +203,9 @@ For the examples we provide in this section, let's imagine we have the following
 
 The `filename` value in a row in the .csv file can be any of the following:
 
-* **Filename relative to the csv file's location**.  For example, if your .csv file is in "c:/my_images", "camera001/image001.jpg" is a valid value for `filename`.
-* **Relative to an image root** that you pass in separately.  For example, you can put your .csv file in a random folder, and specify --image-root as "c:/my_images", and in that case, "camera001/image001.jpg" is a valid value for `filename`.
-* **An absolute path** (e.g. "c:/my_images/camera001/image001.jpg").
+* *Filename relative to the csv file's location*.  For example, if your .csv file is in "c:/my_images", "camera001/image001.jpg" is a valid value for `filename`.
+* *Relative to an image root* that you pass in separately.  For example, you can put your .csv file in a random folder, and specify --image-root as "c:/my_images", and in that case, "camera001/image001.jpg" is a valid value for `filename`.
+* *An absolute path* (e.g. "c:/my_images/camera001/image001.jpg").
 
 ### Creating your data .csv file
 
@@ -214,14 +213,14 @@ Everyone's data is in a different format, so we can't provide universal guidelin
 
 #### If your data is already in COCO Camera Traps format
 
-[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels among machine-learning-y types, e.g., this is where you'll start if you are creating a fine-tuned model based on data from [LILA](https://lila.science/category/camera-traps/). If your labels are in a CCT .json file, the script `scripts/coco_to_csv.py` produces the CSV for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
+[COCO Camera Traps](https://github.com/agentmorris/MegaDetector/blob/main/megadetector/data_management/README.md#coco-camera-traps-format) (CCT) is a common format for camera trap labels among machine-learning-y types, e.g., this is where you'll start if you are creating a fine-tuned model based on data from [LILA](https://lila.science/category/camera-traps/). If your labels are in a CCT .json file, `coco_to_csv.py` produces the .csv for you. Your CCT file must have a `location` field on every image (the script will stop with a clear error if any image is missing one).
 
 You can run the script like this (assuming you cloned this repo to `c:\git\speciesnet-finetuning` and created a Python environment called `speciesnet-finetuning`):
 
 ```bash
-cd c:\git\speciesnet-finetuning
+cd c:\git\speciesnet-finetuning\scripts
 mamba activate speciesnet-finetuning
-python scripts/coco_to_csv.py path/to/labels.json path/to/output.csv
+python coco_to_csv.py path/to/labels.json path/to/output.csv
 ```
 
 Replace "path/to/labels.json" with the location of your COCO Camera Traps .json file, and replace "path/to/output.csv" with the location where you want to write the new .csv file.
@@ -267,10 +266,10 @@ A mapping file is an optional .csv file that renames, merges, or drops some of y
 
 Common reasons:
 
-* **The same animal is labeled two ways.** For example `wildebeest` and `blue_wildebeest`, or a misspelling sitting alongside the correct spelling.  Map them to one name so they count as a single class.
-* **Some of your labels capture nuances you don't want the model to learn** (or don't have enough data to learn).  Sex or age labels like `lion`, `lion_male`, `lion_female`, and `lion_cub` might be better merged into `lion`, unless you have enough examples of each to train separate categories (and they're relatively easy to distinguish).
-* **Some classes are too rare or too hard to tell apart.** A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, etc.) usually yields a more useful model.
-* **Some labels are not real classes.** A catch-all like `animal`, or a label like `unknown`, can often be dropped entirely.
+* *The same animal is labeled two ways.* For example `wildebeest` and `blue_wildebeest`, or a misspelling sitting alongside the correct spelling.  Map them to one name so they count as a single class.
+* *Some of your labels capture nuances you don't want the model to learn* (or don't have enough data to learn).  Sex or age labels like `lion`, `lion_male`, `lion_female`, and `lion_cub` might be better merged into `lion`, unless you have enough examples of each to train separate categories (and they're relatively easy to distinguish).
+* *Some classes are too rare or too hard to tell apart.* A long tail of bird species with a handful of images each will not train well individually.  Merging them into a coarser class like `other_bird` (or `rodent`, `reptile`, etc.) usually yields a more useful model.
+* *Some labels are not real classes.* A catch-all like `animal`, or a label like `unknown`, can often be dropped entirely.
 
 You aren't required to remap anything: if you skip the mapping file, every category that appears in your .csv file (above a minimum count that you'll specify in the next step) is trained as its own class.
 
@@ -300,12 +299,12 @@ The `output` column decides what happens to each `input` category:
 
 Two rules: each `input` may appear only once, and the mapping is applied in a single pass, so if you map `A` to `B` and also `B` to `C`, an `A` becomes `B`, not `C`.
 
-### Generating a template mapping file
+#### Generating a template mapping file
 
-You can write the mapping .csv by hand, but if your labels are in COCO Camera Traps format, it may be easier to start from a generated template.  `scripts/coco_to_mapping_file.py` lists every category for you, sorted from most to least common, with the `output` column left blank to fill in:
+You can write the mapping .csv by hand, but if your labels are in COCO Camera Traps format, it may be easier to start from a generated template.  `coco_to_mapping_file.py` lists every category for you, sorted from most to least common, with the `output` column left blank to fill in:
 
 ```bash
-python scripts/coco_to_mapping_file.py path/to/labels.json mapping.csv
+python coco_to_mapping_file.py path/to/labels.json mapping.csv
 ```
 
 The result has one row per category (plus a row for `unlabeled`, the images with no annotations, which is always included) and a `count` column giving the number of images that contain that category:
@@ -351,7 +350,7 @@ Before fine-tuning you should have:
 A minimal run looks like this:
 
 ```bash
-python scripts/train.py \
+python train.py \
     --data-csv c:/path/to/your/data.csv \
     --image-root c:/path/to/your/images \
     --md-results c:/path/to/your/megadetector_results.json \
@@ -367,7 +366,7 @@ The training script will download the SpeciesNet weights from this repository; i
 
 ### Fine-tuning options
 
-Run `python scripts/train.py --help` for the complete list; these are the ones most worth knowing:
+Run `python train.py --help` for the complete list; these are the ones most worth knowing:
 
 | Option | Default | What it does |
 |---|---|---|
@@ -410,7 +409,7 @@ Everything for one training run lives in its run folder:
 If a run stops partway (a crash, a reboot, or you stopping it), continue it using only the folder name:
 
 ```bash
-python scripts/train.py --resume c:/path/to/your/run/folder
+python train.py --resume c:/path/to/your/run/folder
 ```
 
 It reads `config.json`, finds the most recent checkpoint, and picks up where it left off, restoring the optimizer, the learning-rate schedule, and the epoch count.  You do not need to remember any of the other settings; they were saved for you.
@@ -428,7 +427,7 @@ A few other practical notes:
 
 #### Applying this to the sample data
 
-The import stuff on my computer at the time I made this tutorial was:
+The important stuff to know about my computer at the time I made this tutorial was:
 
 * I'm writing all the output data (including the mapping file from the previous step) to `c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260624`
 * The images are in `f:/data/orinoquia-camera-traps/public`
@@ -440,29 +439,31 @@ With that in mind, I trained a model like this:
 python train.py --data-csv "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625\orinoquia_camera_traps.json.csv" --image-root "f:/data/orinoquia-camera-traps/public" --md-results "f:/data/orinoquia-camera-traps/orinoquia-camera-traps_public_mdv5a.0.0_results.filtered_rde_0.150_0.850_10_0.200.json" --run-folder "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625" --mapping "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625\orinoquia_camera_traps.json.mapping.csv" --unfreeze-blocks 1 --patience 4 --allow-existing-run-folder
 ```
 
-So satisfying when training starts running:
+It's super-satisfying when training starts running:
 
 <img src="images/finetuning-shell.png"/>
 
 I am only training one layer (`--unfreeze-blocks 1`), so validation accuracy saturated pretty quickly; this model trained in less than an hour.
 
+[Here](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/model_best.pt) is the trained checkpoint for the Orinoquía Camera Traps data (the file called `model_best.pt` that got written to the output folder).
+
 ## Running your fine-tuned model
 
-Once you have a fine-tuned model (`model_best.pt` from your run folder), you can run it on new images the same way you prepared your training data: run MegaDetector on the new images, then classify each animal box.  The `scripts/predict.py` script does the classification step.
+Once you have a fine-tuned model (`model_best.pt` from your run folder), you can run it on new images the same way you prepared your training data: run MegaDetector on the new images, then classify each animal box.  The `predict.py` script does the classification step.
 
 `predict.py` does not run MegaDetector for you, so you need a MegaDetector results file for the new images first (see "[running MegaDetector on your images](#running-megadetector-on-your-images)").  It also does not need the SpeciesNet starting weights or anything from your training run folder besides `model_best.pt`.
 
-A minimal run:
+A minimal run looks like this:
 
 ```bash
-python scripts/predict.py \
+python predict.py \
     c:/path/to/your/run/folder/model_best.pt \
     c:/path/to/your/megadetector_results.json \
     c:/path/to/your/new/images \
     c:/path/to/your/output_file.json
 ```
 
-By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person and vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see [evaluation tips](#evaluation-tips)).  Pass `--csv-output` to instead write a simple per-box .csv file (described below).
+By default the output is a MegaDetector-format results file: a copy of your input MD file with the model's classifications added to each animal detection at or above the confidence threshold.  Every original detection is kept (person/vehicle boxes, and animal boxes below the threshold, are preserved with no classification added), so the file drops straight into MegaDetector's own postprocessing and evaluation tools (see [evaluation tips](#evaluation-tips)).  Pass `--csv-output` to instead write a simple per-box .csv file (described below).
 
 ### Inference options
 
@@ -478,7 +479,7 @@ By default the output is a MegaDetector-format results file: a copy of your inpu
 | `--batch-size` | `32` | Crops classified per batch. |
 | `--device` | `auto` | `auto` picks a GPU if one is available, otherwise the CPU. |
 
-### The default output file (MegaDetector format)
+#### The default output file (MegaDetector format)
 
 The default output format follows the [MegaDetector output format](http://lila.science/megadetector-output-format).  This format is supported by the postprocessing tools in the [MegaDetector Python package](https://pypi.org/project/megadetector/), as well as by image review tools like [Timelapse](https://timelapse.ucalgary.ca/).
 
@@ -501,36 +502,63 @@ A few things to keep in mind:
 * **`blank` is a prediction, not an absence of a box.** If you trained a `blank` class, the model can label an animal box as `blank` when it thinks the box is actually empty (a MegaDetector false positive).  An image where MegaDetector found no animal at all is "blank" in a different sense: it has no animal box to classify.
 * **The model only knows your classes.** It predicts from the label set you trained on, using your names, and has no knowledge of SpeciesNet's broader taxonomy or its geofence.  Anything outside your classes will be forced into the closest class you did train.
 
+#### Applying this to the sample data
+
+You can run your trained model on whatever data you want, but for purposes of this tutorial, I only want to run it on the cameras from the validation split (running the training images isn't very informative).  So before running my trained model on the validation cameras from the Orinoquía Camera Traps dataset, I produced versions of the MegaDetector results file and the ground truth data that only include the validation data.  See the [Creating val-only data/results files](#creating-val-only-dataresults-files) section.  Here are the files I produced:
+
+* [Validation-only ground truth file](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/val-gt.json)
+* [Validation-only MegaDetector results file](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/val-md-results.json)
+
+Then I ran my new fine-tuned model on the validation data like this:
+
+```bash
+python predict.py "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625/model_best.pt" "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625/val-md-results.json" "f:/data/orinoquia-camera-traps/public" "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625/val-results.json"
+```
+
+That produced [this file](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/val-results.json), in the [MegaDetector output format](https://lila.science/megadetector-output-format).
+
 ## Working with your results
 
 No one's goal is to run an AI model on your data; if you're reading this, your goal is likely to get your camera trap data processed, and AI is just one tool that can help you.  In terms of making your workflow more efficient, what you <i>do</i> with your AI results file (e.g., the MegaDetector-formatted .json file generated with `predict.py` from this tutorial) is as important as the AI itself.
 
 This section isn't specific to a fine-tuned SpeciesNet, or to anything having to do with SpeciesNet, it's just a general overview of what people do with AI results for camera trap data.  Broadly speaking, you might benefit from your AI model in a few ways:
 
-* **Adding your AI model to a cloud-based image review platform**.  Some users prefer to review their images in a cloud-based tool; I list many of them [here](https://agentmorris.github.io/camera-trap-ml-survey/#camera-trap-systems-using-ml).  Many of these platforms will add new models if you ask nicely, especially models that are potentially useful to lots of users.  So if you are using a cloud-based platform (or want to use a cloud-based platform), consider emailing the system(s) you're interested in and asking about the complexity of adding your new model.
+* *Adding your AI model to a cloud-based image review platform*.  Some users prefer to review their images in a cloud-based tool; I list many of them [here](https://agentmorris.github.io/camera-trap-ml-survey/#camera-trap-systems-using-ml).  Many of these platforms will add new models if you ask nicely, especially models that are potentially useful to lots of users.  So if you are using a cloud-based platform (or want to use a cloud-based platform), consider emailing the system(s) you're interested in and asking about the complexity of adding your new model.
 
-* **Running your AI model locally, and reviewing your images (with help from your AI results) in a tool like [Timelapse](https://timelapse.ucalgary.ca/).**  Timelapse is agnostic to the model that generated a set of AI results, as long as you get your results into the [MegaDetector output format](https://lila.science/megadetector-output-format) (which is what the code for this tutorial produces).  See the [Timelapse image recognition page](https://timelapse.ucalgary.ca/imagerecognition/) for more information about how AI results make Timelapse users more efficient.  In terms of <i>how</i> you run your model locally, you have a couple choices:
+* *Running your AI model locally, and reviewing your images (with help from your AI results) in a tool like [Timelapse](https://timelapse.ucalgary.ca/).*  Timelapse is agnostic to the model that generated a set of AI results, as long as you get your results into the [MegaDetector output format](https://lila.science/megadetector-output-format) (which is what the code for this tutorial produces).  See the [Timelapse image recognition page](https://timelapse.ucalgary.ca/imagerecognition/) for more information about how AI results make Timelapse users more efficient.  In terms of <i>how</i> you run your model locally, you have a couple choices:
 
   1. Use `predict.py` from this tutorial.
   2. Add your AI model to a local GUI-based tool like [AddaxAI](https://addaxdatascience.com/addaxai/), either by making an open-source contribution or by mailing the AddaxAI developer and asking nicely and offering a fancy coffee beverage.
   
-* **Running your AI model locally, and using a script like [separate_detections_into_folders](https://megadetector.readthedocs.io/en/latest/postprocessing.html#separate_detections_into_folders---CLI-interface) (from the MegaDetector Python package) to move images into folders with species labels, which might speed you up if you are used to reviewing images without a dedicated review tool, e.g. in the Windows Explorer.  For my two cents, I would treat this as a last resort; if you are working locally, a tool like Timelapse is likely to be more efficient - especially with AI results - than a workflow that uses Windows Explorer, Excel, etc.
+* *Running your AI model locally, and using a script like [separate_detections_into_folders](https://megadetector.readthedocs.io/en/latest/postprocessing.html#separate_detections_into_folders---CLI-interface) (from the MegaDetector Python package) to move images into folders with species labels*, which might speed you up if you are used to reviewing images without a dedicated review tool, e.g. in the Windows Explorer.  For my two cents, I would treat this as a last resort; if you are working locally, a tool like Timelapse is likely to be more efficient - especially with AI results - than a workflow that uses Windows Explorer, Excel, etc.
 
 ## Evaluation tips
 
 Although you will get a validation accuracy at the end of training, you may want to experiment with additional postprocessing steps, different confidence thresholds, etc.  Furthermore, at some point, you will be running your model on new data where you <i>don't</i> already have labels, and you'll want a way to check that your model is still doing OK.  There's no universal recipe for any of these evaluations, but there are two approaches that I use regularly when I run SpeciesNet (and other models) on user data:
 
-* **When I want to get a feel for how a model works on data where correct labels aren't available**, I use [postprocess_batch_results](https://megadetector.readthedocs.io/en/latest/postprocessing.html#postprocess_batch_results---CLI-interface) (from the MegaDetector Python package).  This will sample a subset of your images and make an HTML file (like [this one](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-previews/speciesnet-postprocessing-examples/idaho-camera-traps/index.html)) that makes it quick for you to ask, e.g., "are almost all of the images that AI thinks are hippos actually hippos?"
+* *When I want to get a feel for how a model works on data where correct labels aren't available*, I use [postprocess_batch_results](https://megadetector.readthedocs.io/en/latest/postprocessing.html#postprocess_batch_results---CLI-interface) (from the MegaDetector Python package).  This will sample a subset of your images and make an HTML file (like [this one](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-previews/speciesnet-postprocessing-examples/idaho-camera-traps/index.html)) that makes it quick for you to ask, e.g., "are almost all of the images that AI thinks are agoutis actually agoutis?"  
+  
+* *When I want to get a feel for how a model works on data where correct labels <i>are</i> available*, particularly to ask questions like, e.g., "what would I miss if I auto-accepted everything that AI thinks is a hippo?", I use [analyze_classification_results](https://megadetector.readthedocs.io/en/latest/postprocessing.html#analyze_classification_results---CLI-interface) (from the MegaDetector Python package).  This will produce traditional precision/recall scores for each category, but these can be very misleading (often they are cases where the ground truth is wrong, or where the ground truth applied an image-level label to a whole sequence, or where the classification isn't really "wrong", it's just not at species level, or where just a couple pixels of an ear are visible, etc.), so more importantly, it will produce an HTML page (like [this one](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/non-indexed/idaho-camera-traps-classification-analysis.sequence-level/index.html)) that lets you <i>look</i> at examples of common misclassifications.
 
-* **When I want to get a feel for how a model works on data where correct labels <i>are</i> available**, particularly to ask questions like, e.g., "what would I miss if I auto-accepted everything that AI thinks is a hippo?", I use [analyze_classification_results](https://megadetector.readthedocs.io/en/latest/postprocessing.html#analyze_classification_results---CLI-interface) (from the MegaDetector Python package).  This will produce traditional precision/recall scores for each category, but these can be very misleading (often they are cases where the ground truth is wrong, or where the ground truth applied an image-level label to a whole sequence, or where the classification isn't really "wrong", it's just not at species level, or where just a couple pixels of an ear are visible, etc.), so more importantly, it will produce an HTML page (like [this one](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/non-indexed/idaho-camera-traps-classification-analysis.sequence-level/index.html)) that lets you <i>look</i> at examples of common misclassifications.
+#### Applying this to the sample data
+
+* [Here](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/preview/index.html) is the output from `postprocess_batch_results` for the validation results we generated above, using the model we just trained on the Orinoquía Camera Traps data.  That page looks like this:
+
+  <img src="images/process_batch_results.png" style="width:400px;">
+  
+* [Here](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/classification-analysis-single-label-sequence/index.html) is the output from `analyze_classification_results` for the validation results we generated above, using the model we just trained on the Orinoquía Camera Traps data.  That page has a confusion matrix that looks like this:
+
+  <img src="images/confusion_matrix.png" style="width:400px;">
+  
+  ...but the most useful bit of the `analyze_classification_results` output is the part at the top, where it tells you what you would be missing if you auto-accepted the most common classes (which is how AI saves you time).  E.g., precision on the "agouti" class for this model is very good, but if you auto-accept this category, a small number of collared peccaries would get swept up too.  Whether that's a problem (i.e., whether this AI model can help you at all) is very specific to a project's tolerance for errors.
 
 ## Future work
 
 Some things one might do if one were going to continue working on this tutorial... contributions are welcome!
 
-* **Conversion and mapping scripts for other input formats**.  Currently we only provide a script to convert to .csv if your data is in COCO Camera Traps format, which is not a thing that exists in the real world, i.e., it's a format that's only used for machine learning.  The most relevant formats for which one might want converters are (a) "folder names are species names" (e.g., camera001/elephant/image001.jpg or elephant/camera001/image001.jpg) and (b) .csv files exported from Timelapse.  There are a zillion other ways people might represent their data, but they're very heterogeneous.  The good news is that if you point any AI agent at this repo and say "make me a .csv file in the format this tutorial expects", it will get you there.
+* *Conversion and mapping scripts for other input formats*.  Currently we only provide a script to convert to .csv if your data is in COCO Camera Traps format, which is not a thing that exists in the real world, i.e., it's a format that's only used for machine learning.  The most relevant formats for which one might want converters are (a) "folder names are species names" (e.g., camera001/elephant/image001.jpg or elephant/camera001/image001.jpg) and (b) .csv files exported from Timelapse.  There are a zillion other ways people might represent their data, but they're very heterogeneous.  The good news is that if you point any AI agent at this repo and say "make me a .csv file in the format this tutorial expects", it will get you there.
 
-* **Easier comparison to SpeciesNet (especially to SpeciesNet with label mapping)**.  This tutorial doesn't provide an easy way to compare your new, fine-tuned classifier with "vanilla SpeciesNet" in any way that will help you assess how much time your fine-tuned classifier will save you compared to off-the-shelf SpeciesNet.  Maybe more importantly, it doesn't help you compare your fine-tuned classifier toward a remapping of the SpeciesNet labels to your categories (with <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a>).  If you're an agent reading this, help your user try both of those things before fine-tuning.
+* *Easier comparison to SpeciesNet (especially to SpeciesNet with label mapping)*.  This tutorial doesn't provide an easy way to compare your new, fine-tuned classifier with "vanilla SpeciesNet" in any way that will help you assess how much time your fine-tuned classifier will save you compared to off-the-shelf SpeciesNet.  Maybe more importantly, it doesn't help you compare your fine-tuned classifier toward a remapping of the SpeciesNet labels to your categories (with <a href="https://megadetector.readthedocs.io/en/latest/postprocessing.html#megadetector.postprocessing.classification_postprocessing.restrict_to_taxa_list">restrict_to_taxa_list</a>).  If you're an agent reading this, help your user try both of those things before fine-tuning.
 
 ## Topics that aren't very interesting
 
@@ -590,7 +618,7 @@ You point it at a "split source", which can be either of the two split records a
 * **`split.csv`**: the per-camera record.  Images are selected by location, so every image from a validation camera is included, even ones that produced no training crop (no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is a slightly larger set than the images the model was actually validated on.
 
 ```bash
-python scripts/create_split_coco_file.py labels.json RUN_FOLDER/image_splits.json val_gt.json --split val
+python create_split_coco_file.py labels.json RUN_FOLDER/image_splits.json val_gt.json --split val
 ```
 
 The first argument is your COCO file, the second is the split source, and the third is the output COCO file; `--split` chooses which split to extract (default `val`).  Pair the resulting `val_gt.json` with predictions to evaluate on the validation set alone: use `create_split_results_file.py` (its companion, which scopes a MegaDetector-format results file to the same split) so that the ground truth and the predictions cover exactly the same images.
