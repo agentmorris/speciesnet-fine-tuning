@@ -519,6 +519,10 @@ python predict.py "c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-2026062
 
 That produced [this file](https://lilawildlife.blob.core.windows.net/lila-wildlife/previews/speciesnet-finetuning-tutorial/orinoquia-20260624/val-results.json), in the [MegaDetector output format](https://lila.science/megadetector-output-format).
 
+Here is a gratuitous image that indicates the model did something useful:
+
+<img src="images/sample-output-image.jpg" style="width:600px;">
+
 ## Working with your results
 
 No one's goal is to run an AI model on your data; if you're reading this, your goal is likely to get your camera trap data processed, and AI is just one tool that can help you.  In terms of making your workflow more efficient, what you <i>do</i> with your AI results file (e.g., the MegaDetector-formatted .json file generated with `predict.py` from this tutorial) is as important as the AI itself.
