@@ -211,9 +211,9 @@ The options:
 |---|---|---|
 | `--multiple-label-handling` | `omit` | What to do with images that have more than one distinct category. `omit` drops them; `all` writes one row per category. |
 | `--unlabeled-image-handling` | `omit` | What to do with images that have *no* label at all. `omit` drops them; `error` stops so you can investigate; `include` keeps them, labeled as `unlabeled`. |
-| `--image-folder` | (none) | The folder your images live in. Only needed for `--check-images` or `--absolute-paths`. |
+| `--image-folder` | (none) | The folder your images live in. Only needed for `--image-verification` or `--absolute-paths`. |
 | `--absolute-paths` | off | Write absolute image paths instead of the paths as they appear in the JSON. Requires `--image-folder`. |
-| `--check-images` | off | Before writing, confirm every referenced image actually exists on disk. Requires `--image-folder`. |
+| `--image-verification` | (none) | Check that every referenced image exists on disk before writing. `error` stops without writing the CSV if any are missing; `omit` drops the rows whose image is missing; `warning` keeps every row. `omit` and `warning` both report the count of missing images. Requires `--image-folder` (unless `--absolute-paths` is set). |
 
 The default value for `--multiple-label-handling` is `omit`, which throws away any image that contains more than one category.  This is because we have no way to determine which animal in the image goes with which category.
 
@@ -341,7 +341,7 @@ Run `python scripts/train.py --help` for the complete list; these are the ones m
 | `--epochs` | `20` | Number of passes over the training data. |
 | `--unfreeze-blocks` | `2` | How much of the backbone to train: `0` = the new head only, `N` = the head plus the last N of the backbone's 7 stages, `-1` = the whole network. |
 
-These are the ones you can *probably* leave at their defaults, but you might want to tinker with them if you've trained a model and you want to experiment with different parameters, or you have trouble getting training running:
+These are the ones you can probably leave at their defaults, but you might tinker with them if you've trained a model and you want to experiment with different parameters, or you have trouble getting training running:
 
 | Option | Default | What it does |
 |---|---|---|
@@ -364,7 +364,7 @@ Everything for one training run lives in its run folder:
 * **`metrics.csv`**: per-epoch training and validation metrics.
 * **`config.json`**: the full configuration, which is what makes resuming possible.
 * **`split.csv`**: which camera (location) was assigned to the training set and which to validation.
-* **`image_splits.json`**: a per-image record of which images went into each split, mapping every data-CSV image to `train`, `val`, or `excluded`.  `excluded` covers images that were in your data but produced no training crop (for example, no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is what `create_split_coco_file.py` and `create_split_results_file.py` read to reconstruct the exact image set of a split (see "[creating a val-only data file](#creating-a-val-only-data-file)").
+* **`image_splits.json`**: a per-image record of which images went into each split, mapping every data-CSV image to `train`, `val`, or `excluded`.  `excluded` covers images that were in your data but produced no training crop (for example, no animal box above the confidence threshold, or a class dropped by `--min-instances`).  This is what `create_split_coco_file.py` and `create_split_results_file.py` read to reconstruct the exact image set of a split (see "[creating val-only data/results files](#creating-val-only-dataresults-files)").
 * **`hparams.yaml`**: the model's hyperparameters, as recorded by the training engine (PyTorch Lightning).
 
 ### Resuming an interrupted run
@@ -520,7 +520,7 @@ python -m speciesnet_convert.convert \
 
 `--variant m` selects the EfficientNetV2-M architecture, which is the one SpeciesNet uses.  It must match the weights, and the converter checks this with a strict load, printing "Strict load successful" only when the architecture and weights line up.  The conversion runs fine on CPU and takes only a few seconds once the Keras model has loaded.  We separately confirmed that the converted model agrees with the officially released PyTorch SpeciesNet.
 
-### Creating a val-only data file
+### Creating val-only data/results files
 
 Although you will get a validation accuracy at the end of training, you may want to experiment with additional postprocessing steps, different confidence thresholds, etc.  At this stage, you might find it helpful to have a ground-truth file that contains just the images from your validation split.  However, since everyone's data begins life in a totally different format, there's no universal way to create that file.  This subsection is buried in the "topics that aren't very interesting" section of the tutorial because we're describing how to do this for data that's in [COCO Camera Traps](http://lila.science/coco-camera-traps) format, which is only really used in very machine-learning-y contexts, i.e. it doesn't really exist in the real world.  That said, if you have a COCO Camera Traps file that describes your ground truth data, or you're an agent reading this and you can help your user create one, read on...
 

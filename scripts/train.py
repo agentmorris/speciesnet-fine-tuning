@@ -90,80 +90,83 @@ class TrainingOptions:
 
     def __init__(self):
 
-        #: path to a previous run folder to resume; if set, the data/model options
+        #: Path to a previous run folder to resume; if set, the data/model options
         #: are loaded from its config.json and the other options are ignored
         self.resume = None
 
-        #: path to the data CSV (columns filename, category, location)
+        #: Path to the data CSV (columns filename, category, location)
         self.data_csv = None
 
-        #: folder the data CSV's filenames are relative to
+        #: Folder the data CSV's filenames are relative to
         self.image_root = None
 
         #: MegaDetector results .json file for the images
         self.md_results = None
 
-        #: output folder for this run; must not already exist on a fresh run
+        #: Output folder for this run; must not already exist on a fresh run
         self.run_folder = None
 
-        #: optional category mapping CSV (input,output); None means no remapping
+        #: Optional category mapping CSV (input,output); None means no remapping
         self.mapping = None
 
-        #: target fraction of instances (overall and per category) for validation
+        #: Target fraction of instances (overall and per category) for validation
         self.val_fraction = 0.15
 
-        #: drop categories with fewer than this many instances, after mapping
+        #: Drop categories with fewer than this many instances, after mapping
         self.min_instances = 100
 
-        #: minimum MegaDetector confidence for an animal box to become an instance
+        #: Minimum MegaDetector confidence for an animal box to become an instance
         self.conf_threshold = 0.3
 
-        #: maximum animal boxes to use per image, highest confidence first
+        #: Maximum animal boxes to use per image, highest confidence first
         self.max_boxes = 5
 
-        #: random seed (also determines the train/val split)
+        #: Random seed (also determines the train/val split)
         self.seed = 0
 
-        #: number of training epochs
+        #: Number of training epochs
         self.epochs = 20
 
-        #: batch size per GPU
+        #: Batch size per GPU
         self.batch_size = 32
 
-        #: data-loading worker processes per GPU
+        #: Data-loading worker processes per GPU
         self.workers = 8
 
-        #: optimizer learning rate
+        #: Optimizer learning rate
         self.lr = 1e-4
 
-        #: optimizer weight decay
+        #: Optimizer weight decay
         self.weight_decay = 1e-4
 
-        #: how much of the backbone to train: 0 = head only, N = last N stages,
+        #: How much of the backbone to train: 0 = head only, N = last N stages,
         #: -1 = the whole network
         self.unfreeze_blocks = 2
 
         #: timm model name for the backbone
         self.timm_model = DEFAULT_TIMM_MODEL
 
-        #: converted SpeciesNet weights (URL or local path) to start from, or
+        #: Converted SpeciesNet weights (URL or local path) to start from, or
         #: "imagenet" to start from timm's ImageNet weights
         self.backbone_checkpoint = SPECIESNET_TIMM_URL
 
-        #: weight the loss by inverse class frequency
+        #: Weight the loss by inverse class frequency
         self.weighted_loss = False
 
-        #: how often (in epochs) to save a checkpoint
+        #: How often (in epochs) to save a checkpoint
         self.checkpoint_every_n_epochs = 1
 
-        #: early-stopping patience on val_macro_acc (0 disables early stopping)
+        #: Early-stopping patience on val_macro_acc (0 disables early stopping)
         self.patience = 0
 
         #: GPUs to use: "auto" (all available) or an integer count
         self.devices = "auto"
 
-        #: debug only: cap train/val batches per epoch (0 = no cap)
+        #: Debug only: cap train/val batches per epoch (0 = no cap)
         self.limit_batches = 0
+
+        #: By default, training stops if the run folder already exists
+        self.allow_existing_run_folder = False
 
     # ...def __init__(...)
 
@@ -528,10 +531,13 @@ def run_training(options):
     # Fresh-run folder management happens only in the launcher process
     if (not resuming) and (not is_ddp_child()):
         if os.path.exists(run_folder):
-            raise SystemExit(
-                "ERROR: run folder '%s' already exists. Use --resume to continue it, "
-                "or choose a new folder." % run_folder)
-        os.makedirs(os.path.join(run_folder, "checkpoints"))
+            if not options.allow_existing_run_folder:
+                raise SystemExit(
+                    "ERROR: run folder '%s' already exists. Use --resume to continue it, "
+                    "or choose a new folder." % run_folder)
+            else:
+                print('Warning: run folder %s already exists' % run_folder)
+        os.makedirs(os.path.join(run_folder, "checkpoints"),exist_ok=True)
         with open(os.path.join(run_folder, "config.json"), "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2)
 
@@ -653,7 +659,81 @@ def run_training(options):
 
 #%% Command-line driver
 
+def options_to_cli(options):
+    """
+    Build the train.py command line equivalent to a TrainingOptions object.
+
+    Renders [options] as a "python train.py ..." command, emitting one flag per
+    option whose value differs from the TrainingOptions default; options left at
+    their default are omitted to keep the command short. Path-like values (the
+    data CSV, image root, MegaDetector results, run folder, mapping, resume
+    folder, and backbone checkpoint) are wrapped in double quotes so paths
+    containing spaces survive. Boolean flags (--weighted-loss,
+    --allow-existing-run-folder) are emitted with no value when enabled.
+
+    Args:
+        options (TrainingOptions): the run options to render
+
+    Returns:
+        str: a command line, beginning with "python train.py", that reproduces
+        the non-default options in [options]
+    """
+
+    d = TrainingOptions()
+
+    # (attribute, CLI flag, kind), in the same order as parse_args(). kind is
+    # "path" (value wrapped in double quotes), "store_true" (flag with no value),
+    # or "value" (value rendered as-is).
+    spec = [
+        ("resume", "--resume", "path"),
+        ("data_csv", "--data-csv", "path"),
+        ("image_root", "--image-root", "path"),
+        ("md_results", "--md-results", "path"),
+        ("run_folder", "--run-folder", "path"),
+        ("mapping", "--mapping", "path"),
+        ("val_fraction", "--val-fraction", "value"),
+        ("min_instances", "--min-instances", "value"),
+        ("conf_threshold", "--conf-threshold", "value"),
+        ("max_boxes", "--max-boxes", "value"),
+        ("seed", "--seed", "value"),
+        ("epochs", "--epochs", "value"),
+        ("batch_size", "--batch-size", "value"),
+        ("workers", "--workers", "value"),
+        ("lr", "--lr", "value"),
+        ("weight_decay", "--weight-decay", "value"),
+        ("unfreeze_blocks", "--unfreeze-blocks", "value"),
+        ("timm_model", "--timm-model", "value"),
+        ("backbone_checkpoint", "--backbone-checkpoint", "path"),
+        ("weighted_loss", "--weighted-loss", "store_true"),
+        ("checkpoint_every_n_epochs", "--checkpoint-every-n-epochs", "value"),
+        ("patience", "--patience", "value"),
+        ("devices", "--devices", "value"),
+        ("limit_batches", "--limit-batches", "value"),
+        ("allow_existing_run_folder", "--allow-existing-run-folder", "store_true"),
+    ]
+
+    parts = ["python train.py"]
+    for attr, flag, kind in spec:
+
+        value = getattr(options, attr)
+
+        # Anything still at its default is left off the command line
+        if value == getattr(d, attr):
+            continue
+
+        if kind == "store_true":
+            # Boolean flag: emit just the flag, and only when it is enabled
+            if value:
+                parts.append(flag)
+        elif kind == "path":
+            parts.append('%s "%s"' % (flag, value))
+        else:
+            parts.append("%s %s" % (flag, value))
+
+    return " ".join(parts)
+
 def parse_args(argv=None):
+
     # Pull defaults from TrainingOptions so they are defined in exactly one place.
     d = TrainingOptions()
     p = argparse.ArgumentParser(description=__doc__,
@@ -690,6 +770,10 @@ def parse_args(argv=None):
     p.add_argument("--devices", default=d.devices, help="'auto' (all GPUs) or an integer count")
     p.add_argument("--limit-batches", type=int, default=d.limit_batches,
                    help="debug: cap train/val batches per epoch (0 = no cap)")
+    p.add_argument("--allow-existing-run-folder", action="store_true",
+                   default=d.allow_existing_run_folder,
+                   help="proceed (with a warning) if the run folder already exists, "
+                   "instead of stopping; does not apply to --resume")
     return p.parse_args(argv)
 
 

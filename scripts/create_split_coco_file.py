@@ -105,6 +105,18 @@ def create_split_coco_file(input_coco,
     in which case images are selected by their "location" field, or a per-image
     split .json (file name -> "train"/"val"/"excluded", as written by train.py),
     in which case images are selected by file name and [split] may be "excluded".
+
+    Args:
+        input_coco (str): path to the COCO Camera Traps .json file to filter
+        split_source (str): path to the split source. A name ending in ".json" is
+            read as a per-image split file (file name -> split) and images are
+            selected by file name; anything else is read as a location splits.csv
+            (columns location,split) and images are selected by their "location"
+            field
+        output_json (str): path of the COCO .json to write; parent directories are
+            created if needed
+        split (str, optional): split name to extract, e.g. "train" or "val" (and,
+            for a per-image split file, "excluded") (default "val")
     """
 
     use_image_splits = str(split_source).lower().endswith(".json")

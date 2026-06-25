@@ -126,7 +126,7 @@ def coco_to_csv(input_json,
                 multiple_label_handling="omit",
                 unlabeled_image_handling="omit",
                 absolute_paths=False,
-                check_images=False):
+                image_verification=None):
     """
     Convert a COCO Camera Traps file to the tutorial's flat CSV (filename,
     category, location).
@@ -136,14 +136,15 @@ def coco_to_csv(input_json,
     image exists on disk, writes [output_csv], and prints a summary to stderr.
     Exits via fail() on unrecoverable problems, such as needing [image_folder]
     when it was not supplied, an unlabeled image when [unlabeled_image_handling]
-    is "error", or referenced images missing on disk.
+    is "error", referenced images missing on disk when [image_verification] is
+    "error", or an invalid [image_verification] value.
 
     Args:
         input_json (str): path to the input COCO Camera Traps .json file
         output_csv (str): path of the CSV to create; parent directories are
             created if needed
         image_folder (str, optional): base folder the images live in; required
-            only when [absolute_paths] or [check_images] is set
+            only when [absolute_paths] is set or [image_verification] is used
         multiple_label_handling (str, optional): how to handle images with more
             than one distinct category: "omit" (default) drops them, "all" writes
             one row per category
@@ -152,9 +153,18 @@ def coco_to_csv(input_json,
             writes them with the category "unlabeled"
         absolute_paths (bool, optional): if True, write absolute image paths
             instead of the verbatim COCO file_name; requires [image_folder]
-        check_images (bool, optional): if True, verify every referenced image
-            exists on disk before writing; requires [image_folder]
+        image_verification (str, optional): whether to verify that every
+            referenced image exists on disk before writing: None (default) skips
+            the check, "error" aborts without writing if any are missing,
+            "warning" reports the number missing but still writes every row, and
+            "omit" drops the rows whose image is missing (also reporting the
+            count). Any other value is an error. Checking requires [image_folder]
+            (unless [absolute_paths] is set)
     """
+
+    if image_verification not in (None, "warning", "error", "omit"):
+        fail("image_verification must be None, 'warning', 'error', or 'omit' "
+             "(got {!r})".format(image_verification))
 
     with open(input_json, encoding="utf-8") as f:
         coco = json.load(f)
@@ -163,8 +173,8 @@ def coco_to_csv(input_json,
 
     if absolute_paths and not image_folder:
         fail("--absolute-paths requires --image-folder")
-    if check_images and not image_folder and not absolute_paths:
-        fail("--check-images requires --image-folder (to locate the images on disk)")
+    if image_verification is not None and not image_folder and not absolute_paths:
+        fail("--image-verification requires --image-folder (to locate the images on disk)")
 
     # Accumulate output rows; only write after all validation passes
     rows = []  # each row is (filename_value, category, location)
@@ -245,25 +255,52 @@ def coco_to_csv(input_json,
 
     # Optionally verify every referenced image exists on disk
     n_checked_missing = 0
-    if check_images:
-        missing = []
-        for filename_value, _, _ in rows:
+    if image_verification is not None:
+        # Flag the rows whose image is missing on disk, keeping their indices so
+        # "omit" can drop exactly those rows
+        missing_indices = []
+        missing_paths = []
+        for i, (filename_value, _, _) in enumerate(rows):
             if absolute_paths:
                 src = filename_value
             else:
                 src = os.path.join(image_folder, filename_value)
             if not os.path.isfile(src):
-                missing.append(src)
-        n_checked_missing = len(missing)
-        if missing:
-            for m in missing[:10]:
-                eprint("MISSING: " + m)
-            if len(missing) > 10:
-                eprint("... and {} more".format(len(missing) - 10))
-            fail(
-                "{} referenced image(s) were not found on disk; CSV not "
-                "written.".format(len(missing))
-            )
+                missing_indices.append(i)
+                missing_paths.append(src)
+        n_checked_missing = len(missing_paths)
+
+        if n_checked_missing:
+            if image_verification == "error":
+                # List a few examples, then abort without writing the CSV
+                for m in missing_paths[:10]:
+                    eprint("MISSING: " + m)
+                if n_checked_missing > 10:
+                    eprint("... and {} more".format(n_checked_missing - 10))
+                fail(
+                    "{} referenced image(s) were not found on disk; CSV not "
+                    "written.".format(n_checked_missing)
+                )
+            elif image_verification == "omit":
+                # Drop the missing-image rows, then warn; recompute the per-class
+                # and location tallies so the summary reflects what was written
+                drop = set(missing_indices)
+                rows = [r for i, r in enumerate(rows) if i not in drop]
+                per_class = Counter()
+                locations_seen = set()
+                for _, cat, location in rows:
+                    per_class[cat] += 1
+                    locations_seen.add(location)
+                eprint(
+                    "WARNING: {} referenced image(s) were not found on disk; "
+                    "their rows were omitted from the CSV.".format(n_checked_missing)
+                )
+            else:
+                # "warning": report the count but write every row anyway
+                eprint(
+                    "WARNING: {} referenced image(s) were not found on disk; "
+                    "writing the CSV anyway.".format(n_checked_missing)
+                )
 
     # Write the CSV
     out_dir = os.path.dirname(os.path.abspath(output_csv))
@@ -277,7 +314,7 @@ def coco_to_csv(input_json,
     print_summary(
         input_json=input_json,
         output_csv=output_csv,
-        check_images=check_images,
+        image_verification=image_verification,
         n_total=n_total,
         n_rows=len(rows),
         per_class=per_class,
@@ -295,7 +332,7 @@ def coco_to_csv(input_json,
 def print_summary(
     input_json,
     output_csv,
-    check_images,
+    image_verification,
     n_total,
     n_rows,
     per_class,
@@ -325,7 +362,7 @@ def print_summary(
     eprint("Unlabeled images omitted                    : {}".format(n_unlabeled_omitted))
     eprint("Unlabeled images included as '{}'  : {}".format(
         UNLABELED_CATEGORY, n_unlabeled_included))
-    if check_images:
+    if image_verification is not None:
         eprint("Referenced images missing on disk           : {}".format(n_checked_missing))
     eprint("")
     eprint("Rows per class (descending):")
@@ -347,8 +384,8 @@ def parse_args(argv=None):
     p.add_argument("output_csv", help="path to the CSV file to create")
     p.add_argument(
         "--image-folder",
-        help="base folder the images live in; required for --check-images or "
-        "--absolute-paths",
+        help="base folder the images live in; required for --image-verification "
+        "or --absolute-paths",
     )
     p.add_argument(
         "--multiple-label-handling",
@@ -372,10 +409,14 @@ def parse_args(argv=None):
         "(requires --image-folder)",
     )
     p.add_argument(
-        "--check-images",
-        action="store_true",
-        help="verify every referenced image exists on disk before writing the CSV "
-        "(requires --image-folder)",
+        "--image-verification",
+        choices=["warning", "error", "omit"],
+        default=None,
+        help="check that every referenced image exists on disk before writing the "
+        "CSV (requires --image-folder unless --absolute-paths is set): 'error' "
+        "aborts without writing if any are missing, 'omit' drops the rows whose "
+        "image is missing, 'warning' keeps every row (the latter two just report "
+        "the count); without this flag, no check is performed",
     )
     return p.parse_args(argv)
 
@@ -388,7 +429,7 @@ def main(argv=None):
                 multiple_label_handling=args.multiple_label_handling,
                 unlabeled_image_handling=args.unlabeled_image_handling,
                 absolute_paths=args.absolute_paths,
-                check_images=args.check_images)
+                image_verification=args.image_verification)
 
 
 if __name__ == "__main__":

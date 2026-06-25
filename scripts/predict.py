@@ -33,6 +33,7 @@ import sys
 import timm
 import torch
 from PIL import Image
+from tqdm import tqdm
 
 file_dir = os.path.dirname(os.path.abspath(__file__))
 if file_dir not in sys.path:
@@ -71,7 +72,7 @@ def load_model(checkpoint_path, device):
 
 def predict(checkpoint,
             md_results,
-            output,
+            output_file,
             image_root,
             csv_output=False,
             conf_threshold=0.1,
@@ -92,7 +93,7 @@ def predict(checkpoint,
         checkpoint (str): path to a fine-tuned model_best.pt (see load_model())
         md_results (str): path to a MegaDetector results .json for the images to
             classify
-        output (str): path to write results to; a MegaDetector-format .json, or a
+        output_file (str): path to write results to; a MegaDetector-format .json, or a
             CSV if [csv_output] is set
         image_root (str): base folder the MegaDetector "file" paths are relative to
         csv_output (bool, optional): if True, write a flat per-box CSV instead of
@@ -186,8 +187,10 @@ def predict(checkpoint,
 
     # ...def _process_current_batch()
 
-    for fname, bbox, det in detections_to_classify:
+    for fname, bbox, det in tqdm(detections_to_classify):
 
+        # We are often processing multiple detections from the same image, don't re-load
+        # the image for every detection.
         if fname != cache_name:
             path = fname if os.path.isabs(fname) else os.path.join(image_root, fname)
             try:
@@ -204,7 +207,7 @@ def predict(checkpoint,
         if len(current_batch) >= batch_size:
             _process_current_batch()
 
-    # ...for each detection tht needs classifying
+    # ...for each detection that needs classifying
 
     _process_current_batch()
 
@@ -212,20 +215,20 @@ def predict(checkpoint,
         fieldnames = ["filename", "x", "y", "w", "h", "detection_conf"]
         for r in range(topk):
             fieldnames += ["pred%d_class" % (r + 1), "pred%d_score" % (r + 1)]
-        with open(output, "w", newline="", encoding="utf-8") as f:
+        with open(output_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(csv_rows)
-        print("Wrote %d classified boxes (CSV) to %s" % (len(csv_rows), output))
+        print("Wrote %d classified boxes (CSV) to %s" % (len(csv_rows), output_file))
     else:
         # MegaDetector-format output: add our classification label map and keep
         # every original detection.
         md["classification_categories"] = {str(i): c for i, c in enumerate(classes)}
-        with open(output, "w", encoding="utf-8") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(md, f, indent=1)
         n_classified = sum(1 for _, _, det in detections_to_classify if "classifications" in det)
         print("Wrote MegaDetector-format results to %s (classified %d animal boxes; "
-              "all original detections preserved)" % (output, n_classified))
+              "all original detections preserved)" % (output_file, n_classified))
 
 # ...def predict(...)
 
@@ -253,7 +256,7 @@ def main(argv=None):
     args = parse_args(argv)
     predict(checkpoint=args.checkpoint,
             md_results=args.md_results,
-            output=args.output_file,
+            output_file=args.output_file,
             image_root=args.image_root,
             csv_output=args.csv_output,
             conf_threshold=args.conf_threshold,

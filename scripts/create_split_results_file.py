@@ -40,7 +40,7 @@ from create_split_coco_file import eprint, fail, load_split_locations, load_imag
 
 #%% Support functions
 
-def load_locations_from_coco(coco_file):
+def _load_locations_from_coco(coco_file):
     """
     Return a dict mapping image file name -> location (as a string), read from a
     COCO Camera Traps file. Used to split a MegaDetector results file (which has
@@ -60,9 +60,9 @@ def load_locations_from_coco(coco_file):
 
 #%% Main function
 
-def create_split_results_file(input_results,
+def create_split_results_file(input_file,
+                              output_file,
                               split_source,
-                              output_results,
                               split='val',
                               coco_file=None):
     """
@@ -76,11 +76,26 @@ def create_split_results_file(input_results,
     no location field, so when splitting by location, [coco_file] (a COCO Camera
     Traps file with a "location" on every image) is also required, to map file
     names to locations.
+
+    Args:
+        input_file (str): path to the MegaDetector results .json file to filter
+        split_source (str): path to the split source. A name ending in ".json" is
+            read as a per-image split file (file name -> split) and images are
+            selected by file name; anything else is read as a location splits.csv
+            (columns location,split) and images are selected by location, which
+            also requires [coco_file]
+        output_file (str): path of the MegaDetector results .json to write;
+            parent directories are created if needed
+        split (str, optional): split name to extract, e.g. "train" or "val" (and,
+            for a per-image split file, "excluded") (default "val")
+        coco_file (str, optional): COCO Camera Traps .json with a "location" on
+            every image, used to map file names to locations; required only when
+            [split_source] is a location splits.csv (default None)
     """
 
     use_image_splits = str(split_source).lower().endswith(".json")
 
-    with open(input_results, encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         results = json.load(f)
     images = results.get("images", [])
 
@@ -93,21 +108,21 @@ def create_split_results_file(input_results,
             fail("splitting a results file by a location splits.csv requires --coco-file "
                  "(MegaDetector results files have no 'location' field).")
         in_split, _all_locations = load_split_locations(split_source, split)
-        file_to_location = load_locations_from_coco(coco_file)
+        file_to_location = _load_locations_from_coco(coco_file)
         kept_images = [im for im in images if file_to_location.get(im.get("file")) in in_split]
         source_desc = "%d locations in split '%s'" % (len(in_split), split)
 
     out = {k: v for k, v in results.items() if k != "images"}
     out["images"] = kept_images
 
-    out_dir = os.path.dirname(os.path.abspath(output_results))
-    if out_dir and not os.path.isdir(out_dir):
+    out_dir = os.path.dirname(os.path.abspath(output_file))
+    if out_dir and (not os.path.isdir(out_dir)):
         os.makedirs(out_dir, exist_ok=True)
-    with open(output_results, "w", encoding="utf-8") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1)
 
     eprint("Split source '%s' (%s)." % (split_source, source_desc))
-    eprint("Kept %d of %d images -> %s" % (len(kept_images), len(images), output_results))
+    eprint("Kept %d of %d images -> %s" % (len(kept_images), len(images), output_file))
 
 
 #%% Command-line driver
@@ -115,10 +130,10 @@ def create_split_results_file(input_results,
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("input_results", help="MegaDetector results .json")
+    p.add_argument("input_file", help="MegaDetector results .json")
     p.add_argument("split_source", help="a location splits.csv (columns location,split) or a "
                    "per-image split .json (filename -> split) from a training run")
-    p.add_argument("output_results", help="output MegaDetector results .json for the chosen split")
+    p.add_argument("output_file", help="output MegaDetector results .json for the chosen split")
     p.add_argument("--split", default="val", help="split name to extract (default: val)")
     p.add_argument("--coco-file", default=None,
                    help="COCO Camera Traps .json providing locations; required only when "
@@ -128,9 +143,9 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    create_split_results_file(input_results=args.input_results,
+    create_split_results_file(input_file=args.input_file,
+                              output_file=args.output_file,
                               split_source=args.split_source,
-                              output_results=args.output_results,
                               split=args.split,
                               coco_file=args.coco_file)
 

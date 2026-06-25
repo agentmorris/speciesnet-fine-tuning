@@ -60,7 +60,8 @@ def fail(message):
     sys.exit(1)
 
 
-def build_mapping_rows(coco):
+def build_mapping_rows(input_file=None,
+                       output_file=None):
     """
     Return a list of (input, output, count) rows, sorted by count descending.
 
@@ -68,8 +69,9 @@ def build_mapping_rows(coco):
     for images with no annotations (always present).
 
     Args:
-        coco (dict): a parsed COCO Camera Traps object, with "images",
-            "annotations", and "categories" lists
+        input_file (str or dict): filename of a COCO Camera Traps .json file,
+            or a loaded COCO Camera Traps object
+        output_file (str, optional): output .csv file
 
     Returns:
         list: a list of (input, output, count) tuples, one per output row, sorted
@@ -79,6 +81,13 @@ def build_mapping_rows(coco):
         category. There is one tuple per distinct category, plus an
         UNLABELED_CATEGORY tuple.
     """
+
+    if isinstance(input_file,str):
+        with open(input_file,'r') as f:
+            coco = json.load(f)
+    else:
+        assert isinstance(input_file,dict), 'Illegal value for [input_file]'
+        coco = input_file
 
     cat_id_to_name = {}
     for c in coco.get("categories", []):
@@ -119,7 +128,12 @@ def build_mapping_rows(coco):
 
     # Sort by count descending, breaking ties alphabetically
     rows = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    return [(name, "", count) for name, count in rows]
+    rows = [(name, "", count) for name, count in rows]
+
+    if output_file is not None:
+        write_mapping_file(rows, output_csv=output_file)
+
+    return rows
 
 # ...def build_mapping_rows(...)
 
@@ -147,6 +161,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
+
     args = parse_args(argv)
     with open(args.input_json, encoding="utf-8") as f:
         coco = json.load(f)

@@ -16,6 +16,7 @@ lightning==2.6.5
 torchmetrics==1.9.0
 pillow>=10.0
 numpy>=1.26
+tqdm>=4.65
 
 # Optional: only needed if you want to load the released (FX) SpeciesNet .pt
 # directly, e.g. to reproduce the conversion-fidelity comparison. Not required to
