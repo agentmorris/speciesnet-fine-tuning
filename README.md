@@ -1,5 +1,7 @@
 # SpeciesNet fine-tuning tutorial
 
+...written by <a href="https://dmorris.net">Dan Morris</a>.
+
 ## Table of contents
 
 [**Overview**](#overview)  
