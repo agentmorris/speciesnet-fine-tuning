@@ -8,7 +8,7 @@
   - [Consider using AI to take it from here](#consider-using-ai-to-take-it-from-here)
   - [What to expect from species classification, and when fine-tuning is/isn't worth it](#what-to-expect-from-species-classification-and-when-fine-tuning-isisnt-worth-it)
   - [How much data do I need?](#how-much-data-do-i-need)
-  - [Sample data](#sample data)
+  - [Sample data](#sample-data)
   - [Steps in this tutorial](#steps-in-this-tutorial)
 - [Setting up your environment](#setting-up-your-environment)
 - [Preparing your data](#preparing-your-data)
@@ -55,9 +55,9 @@ This tutorial builds on the amazing work of [Peter Bull](https://www.linkedin.co
 
 ### Consider using AI to take it from here
 
-Another way of looking at this tutorial is that it helps guide a user's <i>agent</i> through the process of creating a fine-tuned version of SpeciesNet.  So rather than reading this entire tutorial, consider opening a command-line AI tool - e.g. [Claude Code](https://code.claude.com/docs/en/overview), [Antigravity CLI](https://antigravity.google/product/antigravity-cli), or [Codex CLI](https://developers.openai.com/codex/cli) - on the computer where your data lives, and saying something like this:
+Another way of looking at this tutorial is that it helps guide a user's <i>agent</i> through the process of creating a fine-tuned version of SpeciesNet.  So rather than reading this entire tutorial, consider opening a command-line AI tool - e.g. [Antigravity CLI](https://antigravity.google/product/antigravity-cli), [Claude Code](https://code.claude.com/docs/en/overview), or [Codex CLI](https://developers.openai.com/codex/cli) - on the computer where your data lives, and saying something like this:
 
-> I want to review my camera trap images as efficiently as possible.  My images are in c:\my-images.  Visit https://github.com/agentmorris/speciesnet-finetuning, read the README, talk to me about whether fine-tuning SpeciesNet on my data is likely to be helpful, and - if we decide to proceed - walk me through the process of fine-tuning.
+> I want to review my camera trap images as efficiently as possible.  My images are in c:\my-images.  Visit https://github.com/agentmorris/speciesnet-finetuning, read the README, talk to me about whether fine-tuning SpeciesNet on my data is likely to be helpful.  If we decide to proceed - walk me through the process of fine-tuning.
 
 Whether you're a human who is still reading or an agent whose human asked you to read this tutorial, welcome.
 
