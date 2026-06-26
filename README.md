@@ -139,7 +139,7 @@ The instructions in this tutorial will assume two things:
 
 2. This tutorial assumes that you have a Python environment set up.  For folks new to Python, I recommend installing [Miniforge](https://github.com/conda-forge/miniforge), a free tool for managing Python environments.  Consider following the "[Setting up a Python environment](https://github.com/google/cameratrapai/blob/main/installing-python.md)" instructions from the SpeciesNet repo, which will walk you through installing Miniforge.
 
-Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, start a  Miniforge prompt, then cd into that folder like this:
+Assuming you've installed Miniforge and git, and cloned this repo to a folder on your computer, start a Miniforge prompt, then cd into that folder like this:
 
 `cd c:\git\speciesnet-finetuning`
 
@@ -185,7 +185,7 @@ A01/01290101.JPG,spixs_guan,A01
 
 Two things to know about this format:
 
-* *An image can appear in more than one row.*  If a single photo contains both a black agouti and an collared peccary, it can have a `black_agouti` row and an `collared_peccary` row.
+* *An image can appear in more than one row.*  If a single photo contains both a black agouti and a collared peccary, it can have a `black_agouti` row and a `collared_peccary` row.
 * *The class names are entirely up to you.*  Whatever you put in the "category" column will be what your fine-tuned model predicts.
 
 ### Why camera locations matter
@@ -431,7 +431,7 @@ A few other practical notes:
 
 The important stuff to know about my computer at the time I made this tutorial was:
 
-* I'm writing all the output data (including the mapping file from the previous step) to `c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260624`
+* I'm writing all the output data (including the mapping file from the previous step) to `c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625`
 * The images are in `f:/data/orinoquia-camera-traps/public`
 * The MegaDetector results file for these images is at `f:/data/orinoquia-camera-traps/orinoquia-camera-traps_public_mdv5a.0.0_results.filtered_rde_0.150_0.850_10_0.200.json`
 
