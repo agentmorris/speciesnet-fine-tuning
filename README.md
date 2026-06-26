@@ -431,7 +431,7 @@ A few other practical notes:
 
 The important stuff to know about my computer at the time I made this tutorial was:
 
-* I'm writing all the output data (including the mapping file from the previous step) to `c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260624`
+* I'm writing all the output data (including the mapping file from the previous step) to `c:/temp/speciesnet-fine-tuning-scratch/runs/orinoquia-20260625`
 * The images are in `f:/data/orinoquia-camera-traps/public`
 * The MegaDetector results file for these images is at `f:/data/orinoquia-camera-traps/orinoquia-camera-traps_public_mdv5a.0.0_results.filtered_rde_0.150_0.850_10_0.200.json`
 
