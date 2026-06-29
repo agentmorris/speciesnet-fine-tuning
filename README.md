@@ -52,7 +52,7 @@ If you have any questions or feedback about this tutorial, or you get stuck, or 
 
 ### Special thanks
 
-This tutorial builds on the amazing work of [Peter Bull](https://www.linkedin.com/in/pjbull), who ported the SpeciesNet weights to a fine-tuning-friendly container.  See his [speciesnet-convert](https://github.com/pjbull/speciesnet-convert) repo for more information.  That work was in support of the [Zamba Cloud](https://www.zambacloud.com/) platform, a no-code tool that allows you to, among other things, train a custom model.  If your goal is to train a custom model, and you don't specifically need to use SpeciesNet, you might consider skipping this tutorial and instead trying Zamba Cloud.
+This tutorial builds on the amazing work of [Peter Bull](https://www.linkedin.com/in/pjbull), who ported the SpeciesNet weights to a fine-tuning-friendly container.  See his [speciesnet-convert](https://github.com/pjbull/speciesnet-convert) repo for more information.  That work was in support of the [Zamba Cloud](https://www.zambacloud.com/) platform, a no-code tool that allows you to, among other things, train a custom model.  If your goal is to train a custom model, and you don't specifically need to use SpeciesNet, you might consider skipping this tutorial and instead trying Zamba Cloud.  Also, the [Zamba Python package](https://pypi.org/project/zamba/) supports custom model training (like what we're doing in this tutorial), but unlike this tutorial, the Zamba Python package allows you to do this for <i>video</i> as well as stills.  So if you want to train a model where video is an essential ingredient (e.g. for behavior classification), check out Zamba Cloud and/or the Zamba Python package.
 
 ### Consider using AI to take it from here
 

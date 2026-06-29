@@ -41,7 +41,7 @@ IMAGENET_SENTINEL = "imagenet"
 
 def _load_checkpoint(src):
     """
-    Load a checkpoint from a local path or an http(s) URL (URLs are cached).
+    Load a checkpoint from a local path or URL.
     """
 
     if str(src).startswith(("http://", "https://")):
@@ -49,40 +49,48 @@ def _load_checkpoint(src):
     return torch.load(src, map_location="cpu", weights_only=False)
 
 
-def build_model(num_classes, timm_model=DEFAULT_TIMM_MODEL,
+def build_model(num_classes,
+                timm_model=DEFAULT_TIMM_MODEL,
                 speciesnet_checkpoint=SPECIESNET_TIMM_URL):
     """
     Create the classifier.
 
     speciesnet_checkpoint may be a URL or a local path to converted SpeciesNet
-    weights (pjbull "speciesnet-convert" format: a dict containing a 'state_dict'),
+    weights ("speciesnet-convert" format: a dict containing a 'state_dict'),
     in which case the backbone is loaded and the classifier head is reset to
     num_classes. It defaults to the released SpeciesNet timm checkpoint
     (SPECIESNET_TIMM_URL), downloaded and cached on first use. Pass
-    IMAGENET_SENTINEL ("imagenet") to start from timm's ImageNet weights instead,
-    which is only useful for checking that a setup runs.
+    IMAGENET_SENTINEL to start from timm's ImageNet-trained weights instead.
     """
 
-    if not speciesnet_checkpoint or speciesnet_checkpoint == IMAGENET_SENTINEL:
+    # Create a default ImageNet-trained model if no SpeciesNet checkpoint is provided
+    if (speciesnet_checkpoint is None) or (speciesnet_checkpoint == IMAGENET_SENTINEL):
         return timm.create_model(timm_model, pretrained=True, num_classes=num_classes)
 
+    # Load the checkpoint
     model = timm.create_model(timm_model, pretrained=False, num_classes=num_classes)
     ckpt = _load_checkpoint(speciesnet_checkpoint)
     state_dict = ckpt.get("state_dict", ckpt) if isinstance(ckpt, dict) else ckpt
-    # Drop the original (full-taxonomy) classifier so our fresh head survives
+
+    # Drop the original classifier head (for the full SpeciesNet taxonomy)
     state_dict = {k: v for k, v in state_dict.items()
                   if not (k.startswith("classifier.") or k.startswith("head."))}
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     bad_missing = [m for m in missing
                    if not (m.startswith("classifier.") or m.startswith("head."))]
+
     if bad_missing:
         raise RuntimeError(
             "Missing non-classifier keys when loading SpeciesNet weights: %s"
             % bad_missing[:10])
+
     if unexpected:
         raise RuntimeError(
             "Unexpected keys when loading SpeciesNet weights: %s" % unexpected[:10])
+
     return model
+
+# ...def build_model(...)
 
 
 def freeze_backbone(model, unfreeze_blocks):
@@ -97,17 +105,33 @@ def freeze_backbone(model, unfreeze_blocks):
     """
 
     if unfreeze_blocks == -1:
+
+        # Train the whole network
         for p in model.parameters():
             p.requires_grad = True
+
     else:
+
+        # Initially lock all layers
         for p in model.parameters():
             p.requires_grad = False
+
+        # In timm's EfficientNet family, the head region of the network contains:
+        #
+        # "classifier": the final linear layer
+        # "conv_head": the final 1x1 convolution that expands the channels before global pooling
+        # "bn2": the batch-norm layer that immediately follows conv_head
+        #
         # Always train the classifier head and the final conv/bn
         for attr in ("classifier", "conv_head", "bn2"):
+
+            # Unfreeze these layers
             mod = getattr(model, attr, None)
             if mod is not None:
                 for p in mod.parameters():
                     p.requires_grad = True
+
+        # Unfreeze other layers if the caller requested other layers to be trained
         n_stages = len(model.blocks)
         for i in range(max(0, n_stages - unfreeze_blocks), n_stages):
             for p in model.blocks[i].parameters():
@@ -115,4 +139,7 @@ def freeze_backbone(model, unfreeze_blocks):
 
     n_trainable = sum(1 for p in model.parameters() if p.requires_grad)
     n_total = sum(1 for _ in model.parameters())
+
     return n_trainable, n_total
+
+# ...def freeze_backbone(...)
